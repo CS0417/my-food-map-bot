@@ -64,20 +64,20 @@ def handle_message(event):
 # 1. AI 魔法新增
 @app.route("/ai_add", methods=["POST"])
 def ai_add():
-    api_key = os.getenv('GEMINI_API_KEY')
-print(f"🔍 檢查到的 API Key 長度: {len(api_key) if api_key else 0}")
-if not api_key:
-    print("🚨 致命錯誤：抓不到 GEMINI_API_KEY！")
-    return jsonify({"error": "找不到 API Key"}), 500
     data = request.get_json()
     raw_text = data.get("text")
     if not raw_text:
         return jsonify({"error": "請提供文字"}), 400
 
+    # 👇 把 API Key 的邏輯直接塞在函數裡，並且確保縮排完全正確
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        return jsonify({"error": "找不到 API Key"}), 500
+
     try:
-        # 👇 修正這裡的縮排！這兩行一定要往內縮，確保它們在 try 裡面
-        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
+        # ... 後面的程式碼保持不變
         prompt = f"""
         你是一個專業的資料整理機器人。
         請從以下輸入中，萃取出「店名」、「完整地址」、「搜尋用乾淨地址」與「標籤」。
