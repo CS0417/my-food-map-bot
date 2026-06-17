@@ -93,13 +93,33 @@ def callback():
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_message = event.message.text
-    
-    # 目前先做簡單的回聲測試，確認串接成功
-    reply_text = f"你說了：「{user_message}」！\n之後我們可以把這裡接上 Gemini AI 魔法！"
-    
+    reply_text = ""
+
+    # 1. 如果使用者輸入「查詢 [關鍵字]」，我們就去資料庫找
+    if user_message.startswith("查詢"):
+        keyword = user_message.replace("查詢", "").strip()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # 模糊搜尋店名或標籤
+        rows = cursor.execute("SELECT name, address FROM stores WHERE name LIKE ? OR category LIKE ?", 
+                              (f"%{keyword}%", f"%{keyword}%")).fetchall()
+        conn.close()
+
+        if rows:
+            reply_text = f"找到了關於「{keyword}」的餐廳：\n"
+            for row in rows:
+                reply_text += f"- {row['name']} ({row['address']})\n"
+        else:
+            reply_text = f"沒有找到關於「{keyword}」的收藏喔！"
+            
+    # 2. 如果輸入其他內容，保持原本的 AI 聊天回覆功能
+    else:
+        reply_text = f"你說了：「{user_message}」！\n試試看輸入「查詢 拉麵」來幫你找餐廳吧！"
+
+    # 3. 回覆訊息給 LINE
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message_with_http_info(
+        line_bot_api.reply_message(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text=reply_text)]
