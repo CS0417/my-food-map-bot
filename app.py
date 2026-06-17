@@ -246,7 +246,8 @@ def auto_crawl_and_add():
                 continue
 
             store_name = result_dict.get("name", "")
-            if not store_name or store_name
+            if not store_name or store_name.strip() == "";
+                continue
 # ----------------------
 # 路由區
 # ----------------------
