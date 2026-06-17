@@ -248,6 +248,36 @@ def auto_crawl_and_add():
             store_name = result_dict.get("name", "")
             if not store_name or store_name.strip() == "":
                 continue
+            
+            # 👇 --- 從這裡開始是你漏掉的下半身，請補上去 --- 👇
+            store_address = result_dict.get("address", "")
+            search_address = result_dict.get("search_address", store_address)
+            store_category = result_dict.get("category", "")
+            
+            lat, lon = get_coordinates(search_address)
+            
+            # 存入資料庫
+            cursor.execute("""
+                INSERT INTO stores (user_id, name, category, address, latitude, longitude, created_at, is_eaten, is_favorite, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+            """, (1, store_name, store_category, store_address, lat, lon, datetime.now().isoformat(), article['source_url']))
+            
+            added_stores.append(store_name)
+            
+        # 這裡就是 Python 苦苦尋找的 except！
+        except Exception as e:
+            print(f"處理文章 {article['title']} 時發生錯誤: {e}")
+            continue # 就算這篇出錯，也繼續處理下一篇
+
+    conn.commit()
+    conn.close()
+    
+    # 爬蟲跑完後，必須告訴網頁結果
+    if added_stores:
+        return jsonify({"message": f"✅ 管線執行完成！成功新增 {len(added_stores)} 家餐廳：{', '.join(added_stores)}"})
+    else:
+        return jsonify({"message": "🤷‍♂️ 爬蟲有抓到文章，但 AI 沒有從裡面找到任何新餐廳資訊。"})
+    # 👆 --- 到這裡結束 --- 👆
 # ----------------------
 # 路由區
 # ----------------------
@@ -264,7 +294,7 @@ def ai_add():
         return jsonify({"error": "請提供文字"}), 400
 
     try:
-        client = genai.Client(api_key="AQ.Ab8RN6JltYa86KBK6rcBNT5TOppTjGpQAZGAm9gn1kIL9lpBnA")
+        client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
         prompt = f"""
         你是一個專業的資料整理機器人。
         請從以下輸入中，萃取出「店名」、「完整地址」、「搜尋用乾淨地址」與「標籤」。
