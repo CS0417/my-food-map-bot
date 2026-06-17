@@ -27,7 +27,9 @@ DB_NAME = "favorite_places.db"
 # LINE Bot 憑證設定 (安全地從 Render 保險箱讀取)
 configuration = Configuration(access_token=os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
-
+@app.route("/")
+def index():
+    return render_template("index.html")
 # ----------------------
 # 🤖 專門接收 LINE 訊息的路由
 # ----------------------
