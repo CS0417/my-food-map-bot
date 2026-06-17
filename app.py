@@ -21,6 +21,51 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 # 強制 Python 的輸出入管線都使用 UTF-8 萬國碼
 sys.stdout.reconfigure(encoding='utf-8')
 
+# 1. 補回：取得座標的輔助函數 (請放在路由函數之前)
+def get_coordinates(address):
+    # 這是一個簡單的示範，如果你有 Google Maps API Key，這裡可以串接
+    # 現在先回傳預設座標，確保程式不會當機
+    return 25.0864, 121.4646 # 蘆洲區附近座標
+
+# 2. 補回：真正建立資料庫的 SQL 語法
+def init_db():
+    print("🚀 正在檢查資料庫...")
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS stores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            name TEXT,
+            category TEXT,
+            address TEXT,
+            latitude REAL,
+            longitude REAL,
+            created_at TEXT,
+            is_eaten INTEGER,
+            is_favorite INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("✅ 資料庫檢查完成！")
+
+# 3. 補回：輔助計算距離與網址
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371 # 地球半徑 (km)
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+    return R * 2 * atan2(sqrt(a), sqrt(1-a))
+
+def get_google_maps_url(name, address):
+    query = urllib.parse.quote(f"{name} {address}")
+    return f"https://www.google.com/maps/search/?api=1&query={query}"
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
 app = Flask(__name__)
 app.json.ensure_ascii = False
 DB_NAME = "favorite_places.db"
@@ -292,5 +337,4 @@ print("--- 初始化完成，準備啟動 Flask ---")
 
 if __name__ == "__main__":
     app.run(debug=True)
-if __name__ == "__main__":
-    app.run(debug=True)
+
