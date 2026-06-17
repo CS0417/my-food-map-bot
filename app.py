@@ -58,19 +58,6 @@ def handle_message(event):
             )
         )
 
-# ----------------------
-# 網頁首頁路由 (幫你把重複的整理成只留一個在這裡)
-# ----------------------
-@app.route("/")
-def index():
-    return render_template("index.html")
-# ----------------------
-# 路由區
-# ----------------------
-@app.route("/")
-def index():
-    return render_template("index.html")
-
 # 1. AI 魔法新增
 @app.route("/ai_add", methods=["POST"])
 def ai_add():
