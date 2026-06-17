@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify, render_template
 import sqlite3
-from google import genai
+import google.generativeai as genai
 import json
 import requests
 from datetime import datetime
+from bs4 import BeautifulSoup
 from math import radians, sin, cos, sqrt, atan2
 import sys
 import re
@@ -69,7 +70,9 @@ def ai_add():
         return jsonify({"error": "請提供文字"}), 400
 
     try:
-        client = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
+        # 👇 修正這裡的縮排！這兩行一定要往內縮，確保它們在 try 裡面
+        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+        model = genai.GenerativeModel('gemini-1.5-flash')
         prompt = f"""
         你是一個專業的資料整理機器人。
         請從以下輸入中，萃取出「店名」、「完整地址」、「搜尋用乾淨地址」與「標籤」。
@@ -82,10 +85,7 @@ def ai_add():
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt
-                )
+                response = model.generate_content(prompt)
                 break
             except Exception as e:
                 if "503" in str(e) and attempt < max_retries - 1:
@@ -273,7 +273,6 @@ def dashboard_data():
         "level": level,
         "categories": category_counts
     })
-
+init_db()
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)
