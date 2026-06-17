@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>我的美食地圖</title>
+</head>
+<body>
+    <h1>📍 周邊美食雷達</h1>
+    
+    <button onclick="findNearbyStores()">尋找附近美食 (3公里內)</button>
+    
+    <div id="result" style="margin-top: 20px; font-weight: bold;"></div>
+
+    <script>
+        function findNearbyStores() {
+            const resultDiv = document.getElementById("result");
+            resultDiv.innerHTML = "正在定位中，請允許瀏覽器讀取位置...";
+
+            // 1. 取得目前位置
+            navigator.geolocation.getCurrentPosition(async function(position) {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                console.log("目前位置:", lat, lon);
+                resultDiv.innerHTML = "定位成功！正在向伺服器查詢資料庫...";
+
+                // 2. 打包資料並傳給 Python 後端
+                try {
+                    const response = await fetch("/nearby", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            latitude: lat,
+                            longitude: lon,
+                            max_distance: 3 // 尋找 3 公里內的店家
+                        })
+                    });
+
+                    // 3. 接收 Python 算好的結果
+                    const stores = await response.json();
+                    console.log("後端回傳的資料:", stores);
+
+                    // 4. 把結果畫到網頁上
+                    if (stores.length === 0) {
+                        resultDiv.innerHTML = "附近 3 公里內沒有找到收藏的餐廳 QQ";
+                    } else {
+                        let htmlString = "<ul>";
+                        stores.forEach(store => {
+                            htmlString += `<li><strong>${store.name}</strong> (${store.category}) - 距離: ${store.distance_km} 公里</li>`;
+                        });
+                        htmlString += "</ul>";
+                        resultDiv.innerHTML = htmlString;
+                    }
+
+                } catch (error) {
+                    console.error("API 呼叫失敗", error);
+                    resultDiv.innerHTML = "查詢失敗，請檢查終端機裡的 Flask 伺服器有沒有在跑。";
+                }
+            }, function(error) {
+                console.error("取得位置失敗", error);
+                resultDiv.innerHTML = "無法取得位置，請確認瀏覽器有跳出並允許定位權限！";
+            });
+        }
+    </script>
+</body>
+</html>
