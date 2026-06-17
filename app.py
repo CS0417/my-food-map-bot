@@ -76,7 +76,7 @@ def ai_add():
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         # ... 後面的程式碼保持不變
         prompt = f"""
         你是一個專業的資料整理機器人。
