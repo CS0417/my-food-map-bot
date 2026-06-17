@@ -64,6 +64,11 @@ def handle_message(event):
 # 1. AI 魔法新增
 @app.route("/ai_add", methods=["POST"])
 def ai_add():
+    api_key = os.getenv('GEMINI_API_KEY')
+print(f"🔍 檢查到的 API Key 長度: {len(api_key) if api_key else 0}")
+if not api_key:
+    print("🚨 致命錯誤：抓不到 GEMINI_API_KEY！")
+    return jsonify({"error": "找不到 API Key"}), 500
     data = request.get_json()
     raw_text = data.get("text")
     if not raw_text:
@@ -273,6 +278,19 @@ def dashboard_data():
         "level": level,
         "categories": category_counts
     })
+def init_db():
+    print("🚀 正在檢查資料庫...")
+    conn = sqlite3.connect(DB_NAME)
+    # ... (建立 table 的 code) ...
+    conn.commit()
+    conn.close()
+    print("✅ 資料庫檢查完成！")
+# 放到檔案最下面，不要放在 if 裡面
+print("--- 伺服器正在進行全域初始化 ---")
 init_db()
+print("--- 初始化完成，準備啟動 Flask ---")
+
+if __name__ == "__main__":
+    app.run(debug=True)
 if __name__ == "__main__":
     app.run(debug=True)
