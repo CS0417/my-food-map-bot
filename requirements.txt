@@ -1,6 +1,6 @@
-Flask==3.0.0
+flask
+google-generativeai
 requests
 beautifulsoup4
-google-genai
 line-bot-sdk
 gunicorn
