@@ -52,6 +52,13 @@
                 <div id="crawlResult" style="margin-top: 10px; font-weight: bold; color: #d32f2f;"></div>
             </div>
         </div>
+        <div style="margin-bottom: 20px;">
+          <input type="text" id="crawlUrl" placeholder="輸入美食推薦頁面網址" style="width: 70%; padding: 8px;">
+          <button onclick="loadRecommendations()" class="btn btn-blue">抓取推薦</button>
+        </div>
+
+<div id="recommendList"></div>
+
 
         <div class="card" style="border-top: 5px solid #4CAF50;">
             <h2>🔍 綜合進階搜尋</h2>
@@ -75,6 +82,92 @@
             <div id="searchResults" style="margin-top: 20px;"></div>
         </div>
     </div>
+    <script>
+async function loadRecommendations() {
+    const url = document.getElementById("crawlUrl").value.trim();
+    const container = document.getElementById("recommendList");
+
+    if (!url) {
+        alert("請先輸入網址");
+        return;
+    }
+
+    container.innerHTML = "爬取中...";
+
+    try {
+        const res = await fetch(`/crawl_recommendations?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+            container.innerHTML = `<p style="color:red;">${data.error || "抓取失敗"}</p>`;
+            return;
+        }
+
+        if (!Array.isArray(data) || data.length === 0) {
+            container.innerHTML = "<p style='color:red;'>沒有抓到推薦資料</p>";
+            return;
+        }
+
+        renderRecommendations(data);
+
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = "<p style='color:red;'>抓取失敗，請稍後再試</p>";
+    }
+}
+
+function renderRecommendations(items) {
+    const container = document.getElementById("recommendList");
+
+    let html = "";
+    items.forEach((item) => {
+        const safeTitle = (item.title || "").replace(/'/g, "\\'");
+        const safeUrl = (item.url || "").replace(/'/g, "\\'");
+        const safeSummary = (item.summary || "").replace(/'/g, "\\'");
+
+        html += `
+            <div class="store-item" style="border: 1px solid #ddd; padding: 12px; margin-bottom: 12px; border-radius: 8px;">
+                <h3 style="margin-top: 0;">${item.title || "未命名"}</h3>
+                <p>${item.summary || ""}</p>
+                <p>
+                    🔗 <a href="${item.url}" target="_blank" rel="noopener noreferrer">查看原文</a>
+                </p>
+                <button class="btn btn-blue" onclick="addToList('safeTitle′,′{safeTitle}', 'safeTitle′,′{safeUrl}', '${safeSummary}')">
+                    加入清單
+                </button>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+async function addToList(title, url, summary) {
+    try {
+        const res = await fetch("/add_recommendation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title: title,
+                url: url,
+                summary: summary
+            })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            alert("加入失敗：" + (data.error || "未知錯誤"));
+            return;
+        }
+
+        alert(data.message);
+    } catch (err) {
+        console.error(err);
+        alert("加入失敗：" + err);
+    }
+}
+</script>
 
     <script>
         let map = null;
