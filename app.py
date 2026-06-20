@@ -16,7 +16,7 @@ from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, 
     ReplyMessageRequest, TextMessage
 )
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, LocationMessageContent
 
 # 強制 Python 輸出入管線使用 UTF-8 編碼
 sys.stdout.reconfigure(encoding="utf-8")
