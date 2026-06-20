@@ -312,7 +312,9 @@ def get_stores():
         store["google_maps_url"] = get_google_maps_url(store["name"], store["address"])
         
     return jsonify(stores)
-
+@app.route("/list")
+def list_page():
+    return render_template("list.html")
 # ----------------------
 # 資料分析與吃貨儀表板
 # ----------------------
