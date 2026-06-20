@@ -113,7 +113,7 @@ def process_and_save_store(text):
             return False, "伺服器缺少 GEMINI_API_KEY"
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
         # 嚴格要求 Gemini 只輸出 JSON 格式
         prompt = f"""
