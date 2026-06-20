@@ -120,10 +120,16 @@ def process_and_save_store(text):
             return False, "伺服器缺少 GEMINI_API_KEY"
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        print("可用模型：")
+        for m in genai.list_models():
+            print(m.name, m.supported_generation_methods)
+
+        model = genai.GenerativeModel("gemini-1.5-flash-001")
 
         prompt = f"""
-請只回傳合法 JSON：
+請只回傳合法 JSON，不要加任何說明文字。
+格式必須是：
 {{"name":"店名","address":"完整地址","category":"類別標籤"}}
 
 請從以下文字萃取：
@@ -158,6 +164,7 @@ def process_and_save_store(text):
     except Exception as e:
         print("Gemini error:", repr(e))
         return False, f"系統處理失敗：{str(e)}"
+
 
 def get_stores_with_distance(user_lat, user_lon):
     conn = get_db_connection()
