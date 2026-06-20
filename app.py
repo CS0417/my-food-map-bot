@@ -95,13 +95,21 @@ def get_coordinates(address):
         print(f"座標轉換失敗: {e}")
     return None, None
 
+from math import radians, sin, cos, sqrt, atan2
+
 def haversine(lat1, lon1, lat2, lon2):
-    """利用 Haversine 公式計算兩點經緯度之間的距離 (公里)"""
-    R = 6371 # 地球半徑 (km)
+    """
+    計算兩個經緯度座標之間的直線距離（公里）
+    """
+    R = 6371  # 地球半徑，單位：公里
+
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
+
     a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
-    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    return R * c
 
 # =========================================================
 # 4. 核心商業邏輯：AI 解析與資料寫入
@@ -113,7 +121,7 @@ def process_and_save_store(text):
             return False, "伺服器缺少 GEMINI_API_KEY"
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        model = genai.GenerativeModel("gemini-1.5-flash")
 
         # 嚴格要求 Gemini 只輸出 JSON 格式
         prompt = f"""
@@ -158,6 +166,51 @@ def process_and_save_store(text):
 
     except Exception as e:
         return False, f"系統處理失敗：{str(e)}"
+def get_stores_with_distance(user_lat, user_lon):
+    conn = get_db_connection()
+    rows = conn.execute("SELECT * FROM stores").fetchall()
+    conn.close()
+
+    result = []
+
+    for row in rows:
+        store = dict(row)
+        store_lat = store.get("latitude")
+        store_lon = store.get("longitude")
+
+        if store_lat is not None and store_lon is not None:
+            distance = haversine(user_lat, user_lon, store_lat, store_lon)
+            store["distance_km"] = round(distance, 2)
+        else:
+            store["distance_km"] = None
+
+        result.append(store)
+
+    # 依距離由近到遠排序，沒有距離的排最後
+    result.sort(key=lambda x: x["distance_km"] if x["distance_km"] is not None else 999999)
+
+    return result
+def get_nearby_stores(user_lat, user_lon, max_distance_km=3):
+    conn = get_db_connection()
+    rows = conn.execute("SELECT * FROM stores").fetchall()
+    conn.close()
+
+    result = []
+
+    for row in rows:
+        store = dict(row)
+        store_lat = store.get("latitude")
+        store_lon = store.get("longitude")
+
+        if store_lat is not None and store_lon is not None:
+            distance = haversine(user_lat, user_lon, store_lat, store_lon)
+
+            if distance <= max_distance_km:
+                store["distance_km"] = round(distance, 2)
+                result.append(store)
+
+    result.sort(key=lambda x: x["distance_km"])
+    return result
 
 # =========================================================
 # 5. 網頁端 Web API 路由 (給前端 JS 呼叫)
@@ -262,6 +315,7 @@ def dashboard_data():
 def callback():
     """LINE 官方伺服器 Webhook 接口"""
     signature = request.headers.get("X-Line-Signature", "")
+    if not signature:return "Missing signature",400
     body = request.get_data(as_text=True)
     try:
         handler.handle(body, signature)
@@ -324,6 +378,45 @@ def handle_message(event):
             ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text=reply_text)]
+            )
+        )
+@app.route("/nearby_stores", methods=["POST"])
+def nearby_stores():
+    data = request.get_json()
+    user_lat = data.get("latitude")
+    user_lon = data.get("longitude")
+    max_distance = float(data.get("max_distance_km", 3))
+
+    if user_lat is None or user_lon is None:
+        return jsonify({"error": "缺少座標"}), 400
+
+    stores = get_nearby_stores(user_lat, user_lon, max_distance)
+    return jsonify(stores)
+@handler.add(MessageEvent, message=LocationMessageContent)
+def handle_location(event):
+    user_lat = event.message.latitude
+    user_lon = event.message.longitude
+
+    stores = get_top_n_nearby_stores(user_lat, user_lon, top_n=5)
+
+    if not stores:
+        reply = "附近沒有找到店家"
+    else:
+        lines = []
+        for s in stores:
+            lines.append(
+                f"店名：{s['name']}\n"
+                f"距離：{s['distance_km']} 公里\n"
+                f"Google Maps：{s['google_maps_url']}"
+            )
+        reply = "\n\n".join(lines)
+
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=reply)]
             )
         )
 
