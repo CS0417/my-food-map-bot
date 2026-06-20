@@ -97,6 +97,7 @@ def callback():
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_message = event.message.text.strip()
+    user_message = user_message.replace("：", ":")
     reply_text = ""
 
     # 1. 針對按鈕點擊的精準引導
