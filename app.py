@@ -9,6 +9,9 @@ from math import radians, sin, cos, sqrt, atan2
 import sys
 import urllib.parse
 import os
+#爬蟲
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 # LINE Bot v3 SDK 相關套件
 from linebot.v3 import WebhookHandler
@@ -59,6 +62,9 @@ def init_db():
             latitude REAL,
             longitude REAL,
             google_maps_url TEXT,
+            source_type TEXT DEFAULT 'manual',
+            source_url TEXT,
+            source_title TEXT,
             created_at TEXT,
             is_eaten INTEGER DEFAULT 0,
             is_favorite INTEGER DEFAULT 0
@@ -223,7 +229,40 @@ def get_nearby_stores(user_lat, user_lon, max_distance_km=3):
 
     result.sort(key=lambda x: x["distance_km"])
     return result
+#爬蟲
+def crawl_top5_food_recommendations(target_url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; FoodGuideBot/1.0)"
+    }
 
+    res = requests.get(target_url, headers=headers, timeout=10)
+    res.raise_for_status()
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    items = []
+
+    # 這裡假設網站每筆推薦的區塊是 .food-card
+    cards = soup.select(".food-card")
+
+    for card in cards[:5]:
+        title_tag = card.select_one(".title")
+        summary_tag = card.select_one(".summary")
+        link_tag = card.select_one("a")
+
+        if not title_tag:
+            continue
+
+        title = title_tag.get_text(strip=True)
+        summary = summary_tag.get_text(strip=True) if summary_tag else ""
+        link = urljoin(target_url, link_tag.get("href")) if link_tag and link_tag.get("href") else target_url
+
+        items.append({
+            "title": title,
+            "summary": summary,
+            "url": link
+        })
+
+    return items
 # =========================================================
 # 5. 網頁端 Web API 路由 (給前端 JS 呼叫)
 # =========================================================
@@ -336,6 +375,57 @@ def dashboard_data():
         "level": level,
         "categories": categories
     })
+#爬蟲
+@app.route("/crawl_recommendations", methods=["GET"])
+def crawl_recommendations():
+    target_url = request.args.get("url", "").strip()
+
+    if not target_url:
+        return jsonify({"error": "缺少 url 參數"}), 400
+
+    try:
+        items = crawl_top5_food_recommendations(target_url)
+        return jsonify(items), 200
+    except Exception as e:
+        print("crawl error:", repr(e))
+        return jsonify({"error": str(e)}), 500
+@app.route("/add_recommendation", methods=["POST"])
+def add_recommendation():
+    data = request.get_json()
+
+    title = data.get("title", "").strip()
+    url = data.get("url", "").strip()
+    summary = data.get("summary", "").strip()
+
+    if not title:
+        return jsonify({"error": "缺少 title"}), 400
+
+    try:
+        conn = get_db_connection()
+        conn.execute("""
+            INSERT INTO stores
+            (name, category, address, google_maps_url, source_type, source_url, source_title, created_at, is_eaten, is_favorite)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            title,
+            "網路推薦",
+            summary,          # 這裡先把 summary 放 address 欄位當備用說明
+            url,
+            "crawled",
+            url,
+            title,
+            datetime.now().isoformat(),
+            0,
+            1
+        ))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"message": f"已加入清單：{title}"}), 200
+
+    except Exception as e:
+        print("add error:", repr(e))
+        return jsonify({"error": str(e)}), 500
 
 # =========================================================
 # 6. LINE Bot 接收與處理核心
