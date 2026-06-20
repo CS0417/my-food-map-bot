@@ -79,6 +79,10 @@ def index():
 # ----------------------
 # 🤖 專門接收 LINE 訊息的路由
 # ----------------------
+@app.route("/keep-alive")
+def keep_alive():
+    return "I am alive!"
+    
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
