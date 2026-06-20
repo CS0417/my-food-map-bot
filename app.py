@@ -115,7 +115,6 @@ def haversine(lat1, lon1, lat2, lon2):
 # 4. 核心商業邏輯：AI 解析與資料寫入
 # =========================================================
 def process_and_save_store(text):
-    """供 LINE Bot 與 Web API 共同呼叫的核心儲存邏輯"""
     try:
         if not gemini_key:
             return False, "伺服器缺少 GEMINI_API_KEY"
@@ -123,36 +122,28 @@ def process_and_save_store(text):
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel("gemini-1.5-flash")
 
-        # 嚴格要求 Gemini 只輸出 JSON 格式
         prompt = f"""
-        你是一個專業的餐廳資訊擷取器。請只輸出 JSON，不要加入任何解釋文字或 Markdown 標記。
-        格式必須是：
-        {{"name": "店名", "address": "完整地址", "category": "類別標籤"}}
-        
-        請從以下文字萃取：
-        {text}
-        """
-        
-        # 強制指定 response_mime_type 提高 JSON 成功率
-        response = model.generate_content(
-            prompt, 
-            generation_config={"response_mime_type": "application/json"}
-        )
-        
-        data = json.loads(response.text.strip())
+請只回傳合法 JSON：
+{{"name":"店名","address":"完整地址","category":"類別標籤"}}
+
+請從以下文字萃取：
+{text}
+"""
+
+        response = model.generate_content(prompt)
+        raw = response.text.strip()
+        data = json.loads(raw)
 
         name = data.get("name")
         address = data.get("address")
         category = data.get("category", "未分類")
 
         if not name or not address:
-            return False, "AI 解析失敗：缺少關鍵的店名或地址"
+            return False, "AI 沒有抓到店名或地址"
 
-        # 取得座標與地圖網址
         lat, lon = get_coordinates(address)
         url = get_google_maps_url(name, address)
 
-        # 寫入資料庫
         conn = get_db_connection()
         conn.execute("""
             INSERT INTO stores
@@ -165,7 +156,9 @@ def process_and_save_store(text):
         return True, name
 
     except Exception as e:
+        print("Gemini error:", repr(e))
         return False, f"系統處理失敗：{str(e)}"
+
 def get_stores_with_distance(user_lat, user_lon):
     conn = get_db_connection()
     rows = conn.execute("SELECT * FROM stores").fetchall()
@@ -230,6 +223,7 @@ def get_stores():
 @app.route("/ai_add", methods=["POST"])
 def ai_add():
     """網頁前端呼叫的 AI 新增接口"""
+    print("hit /ai_add")
     data = request.get_json()
     success, result = process_and_save_store(data.get("text", ""))
     
