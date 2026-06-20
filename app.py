@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, render_template
 import sqlite3
 import google.generativeai as genai
 import json
+from google inport genai
+from google.genai import types
 import requests
 from datetime import datetime
 from math import radians, sin, cos, sqrt, atan2
@@ -118,14 +120,7 @@ def process_and_save_store(text):
     try:
         if not gemini_key:
             return False, "伺服器缺少 GEMINI_API_KEY"
-
-        genai.configure(api_key=gemini_key)
-
-        print("可用模型：")
-        for m in genai.list_models():
-            print(m.name, m.supported_generation_methods)
-
-        model = genai.GenerativeModel("gemini-1.5-flash-001")
+        client = genai.Client(api_key=gemini_key)
 
         prompt = f"""
 請只回傳合法 JSON，不要加任何說明文字。
@@ -136,7 +131,7 @@ def process_and_save_store(text):
 {text}
 """
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model="gemini-1.5-flash",contents=prompt,)
         raw = response.text.strip()
         data = json.loads(raw)
 
