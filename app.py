@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, render_template
 import sqlite3
-import google.generativeai as genai
 import json
 from google import genai
 from google.genai import types
