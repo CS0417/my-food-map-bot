@@ -9,30 +9,47 @@ import sys
 import urllib.parse
 import os
 
+# LINE Bot v3 SDK 相關套件
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, TextMessage
+from linebot.v3.messaging import (
+    Configuration, ApiClient, MessagingApi, 
+    ReplyMessageRequest, TextMessage
+)
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
+# 強制 Python 輸出入管線使用 UTF-8 編碼
 sys.stdout.reconfigure(encoding="utf-8")
+
 app = Flask(__name__)
 app.json.ensure_ascii = False
 DB_NAME = "favorite_places.db"
 
-# 設定環境變數
-configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# =========================================================
+# 1. 環境變數與 LINE、Gemini 初始化設定
+# =========================================================
+line_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+line_secret = os.getenv("LINE_CHANNEL_SECRET")
+gemini_key = os.getenv("GEMINI_API_KEY")
 
-# --- 資料庫初始化 ---
+if not all([line_token, line_secret, gemini_key]):
+    print("⚠️ 警告：環境變數未設定完整 (請檢查 LINE_TOKEN, LINE_SECRET, 或 GEMINI_API_KEY)")
+
+configuration = Configuration(access_token=line_token)
+handler = WebhookHandler(line_secret)
+
+# =========================================================
+# 2. 資料庫連接與初始化
+# =========================================================
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
+    print("🚀 正在檢查並初始化資料庫...")
     conn = get_db_connection()
-    conn.execute('''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS stores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -45,113 +62,276 @@ def init_db():
             is_eaten INTEGER DEFAULT 0,
             is_favorite INTEGER DEFAULT 0
         )
-    ''')
+    """)
     conn.commit()
     conn.close()
+    print("✅ 資料庫檢查完成！")
 
-# --- 工具與外部 API ---
+# =========================================================
+# 3. 工具與輔助函式
+# =========================================================
 def get_google_maps_url(name, address):
+    """將店名與地址轉換為可點擊的 Google Maps 搜尋網址"""
     query = urllib.parse.quote(f"{name} {address}")
     return f"https://www.google.com/maps/search/?api=1&query={query}"
 
 def get_coordinates(address):
+    """利用 OpenStreetMap API 取得真實經緯度座標"""
     try:
         url = "https://nominatim.openstreetmap.org/search"
-        params = {"q": address, "format": "json", "limit": 1}
-        headers = {"User-Agent": "FoodGuideBot/1.0"}
+        params = {
+            "q": address,
+            "format": "json",
+            "limit": 1
+        }
+        headers = {
+            "User-Agent": "FoodGuideBot/1.0"
+        }
         res = requests.get(url, params=params, headers=headers, timeout=10)
         data = res.json()
-        if data:
+        if len(data) > 0:
             return float(data[0]["lat"]), float(data[0]["lon"])
-    except:
-        pass
+    except Exception as e:
+        print(f"座標轉換失敗: {e}")
     return None, None
 
-# --- 核心邏輯 ---
-def process_and_save_store(text):
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    prompt = f"""你是一個餐廳資訊擷取器，請只輸出JSON。格式：{{"name":"", "address":"", "category":""}} 內容：{text}"""
-    
-    response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-    data = json.loads(response.text)
-    
-    name, address = data.get("name"), data.get("address")
-    if not name or not address: return False, "AI 解析失敗"
-    
-    lat, lon = get_coordinates(address)
-    url = get_google_maps_url(name, address)
-    
-    conn = get_db_connection()
-    conn.execute("INSERT INTO stores (name, category, address, latitude, longitude, google_maps_url, created_at) VALUES (?,?,?,?,?,?,?)",
-                 (name, data.get("category", "未分類"), address, lat, lon, url, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
-    return True, name
+def haversine(lat1, lon1, lat2, lon2):
+    """利用 Haversine 公式計算兩點經緯度之間的距離 (公里)"""
+    R = 6371 # 地球半徑 (km)
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
-# --- API 路由 ---
+# =========================================================
+# 4. 核心商業邏輯：AI 解析與資料寫入
+# =========================================================
+def process_and_save_store(text):
+    """供 LINE Bot 與 Web API 共同呼叫的核心儲存邏輯"""
+    try:
+        if not gemini_key:
+            return False, "伺服器缺少 GEMINI_API_KEY"
+
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        # 嚴格要求 Gemini 只輸出 JSON 格式
+        prompt = f"""
+        你是一個專業的餐廳資訊擷取器。請只輸出 JSON，不要加入任何解釋文字或 Markdown 標記。
+        格式必須是：
+        {{"name": "店名", "address": "完整地址", "category": "類別標籤"}}
+        
+        請從以下文字萃取：
+        {text}
+        """
+        
+        # 強制指定 response_mime_type 提高 JSON 成功率
+        response = model.generate_content(
+            prompt, 
+            generation_config={"response_mime_type": "application/json"}
+        )
+        
+        data = json.loads(response.text.strip())
+
+        name = data.get("name")
+        address = data.get("address")
+        category = data.get("category", "未分類")
+
+        if not name or not address:
+            return False, "AI 解析失敗：缺少關鍵的店名或地址"
+
+        # 取得座標與地圖網址
+        lat, lon = get_coordinates(address)
+        url = get_google_maps_url(name, address)
+
+        # 寫入資料庫
+        conn = get_db_connection()
+        conn.execute("""
+            INSERT INTO stores
+            (name, category, address, latitude, longitude, google_maps_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (name, category, address, lat, lon, url, datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+
+        return True, name
+
+    except Exception as e:
+        return False, f"系統處理失敗：{str(e)}"
+
+# =========================================================
+# 5. 網頁端 Web API 路由 (給前端 JS 呼叫)
+# =========================================================
 @app.route("/")
-def index(): return render_template("index.html")
+def index():
+    return render_template("index.html")
+
+@app.route("/stores", methods=["GET"])
+def get_stores():
+    """取得所有餐廳資料供地圖標記"""
+    conn = get_db_connection()
+    rows = conn.execute("SELECT * FROM stores ORDER BY id DESC").fetchall()
+    conn.close()
+    return jsonify([dict(row) for row in rows])
 
 @app.route("/ai_add", methods=["POST"])
 def ai_add():
-    success, res = process_and_save_store(request.json["text"])
-    return jsonify({"message": f"成功新增 {res}"}) if success else jsonify({"error": res}), 400 if not success else 200
+    """網頁前端呼叫的 AI 新增接口"""
+    data = request.get_json()
+    success, result = process_and_save_store(data.get("text", ""))
+    
+    if success:
+        return jsonify({"message": f"成功新增：{result}"}), 200
+    else:
+        return jsonify({"error": result}), 400
 
 @app.route("/update_status/<int:store_id>", methods=["POST"])
 def update_status(store_id):
-    data = request.json
+    """更新吃過或最愛狀態"""
+    data = request.get_json()
+    field = data.get("field")
+    value = data.get("value")
+
+    if field not in ["is_eaten", "is_favorite"]:
+        return jsonify({"error": "不支援的狀態更新"}), 400
+
     conn = get_db_connection()
-    conn.execute(f"UPDATE stores SET {data['field']} = ? WHERE id = ?", (data['value'], store_id))
+    conn.execute(f"UPDATE stores SET {field} = ? WHERE id = ?", (value, store_id))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
 
-@app.route("/dashboard_data", methods=["POST"])
-def dashboard_data():
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM stores").fetchall()
-    total = len(rows)
-    eaten = sum(1 for r in rows if r["is_eaten"] == 1)
-    cats = {r["category"]: sum(1 for row in rows if row["category"] == r["category"]) for r in rows if r["category"]}
-    conn.close()
-    return jsonify({"total": total, "eaten": eaten, "distance": 0, "categories": cats, "level": "美食探險家" if total > 10 else "美食初心者"})
-
 @app.route("/advanced_search", methods=["POST"])
 def advanced_search():
-    data = request.json
-    k = f"%{data.get('keyword', '')}%"
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM stores WHERE name LIKE ? OR category LIKE ? OR address LIKE ?", (k, k, k)).fetchall()
-    conn.close()
-    return jsonify([dict(r) for r in rows])
+    """進階搜尋與距離計算"""
+    data = request.get_json()
+    keyword = data.get("keyword", "").strip()
+    is_eaten = data.get("is_eaten", "all")
+    
+    query = "SELECT * FROM stores WHERE (name LIKE ? OR category LIKE ? OR address LIKE ?)"
+    params = [f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"]
 
-# --- LINE Bot ---
+    if is_eaten in ["0", "1"]:
+        query += " AND is_eaten = ?"
+        params.append(int(is_eaten))
+
+    conn = get_db_connection()
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    result = []
+    # 這裡保留了前端距離計算的擴充性
+    for row in rows:
+        store = dict(row)
+        store["distance_km"] = 9999 
+        result.append(store)
+
+    return jsonify(result)
+
+@app.route("/dashboard_data", methods=["POST"])
+def dashboard_data():
+    """產生儀表板所需的統計資料"""
+    conn = get_db_connection()
+    total = conn.execute("SELECT COUNT(*) FROM stores").fetchone()[0]
+    eaten = conn.execute("SELECT COUNT(*) FROM stores WHERE is_eaten=1").fetchone()[0]
+    
+    # 統計各類別數量
+    rows = conn.execute("SELECT category, COUNT(*) as count FROM stores GROUP BY category").fetchall()
+    conn.close()
+
+    categories = {r["category"]: r["count"] for r in rows if r["category"]}
+
+    # 稱號判定
+    if total < 10: level = "美食初心者 🐣"
+    elif total < 30: level = "城市探險家 🚶"
+    elif total < 50: level = "老饕達人 😋"
+    else: level = "傳說級吃貨 👑"
+
+    return jsonify({
+        "total": total,
+        "eaten": eaten,
+        "distance": 0, # 未來可結合 GPS 計算累積里程
+        "level": level,
+        "categories": categories
+    })
+
+# =========================================================
+# 6. LINE Bot 接收與處理核心
+# =========================================================
 @app.route("/callback", methods=["POST"])
 def callback():
+    """LINE 官方伺服器 Webhook 接口"""
+    signature = request.headers.get("X-Line-Signature", "")
+    body = request.get_data(as_text=True)
     try:
-        handler.handle(request.get_data(as_text=True), request.headers.get("X-Line-Signature", ""))
-    except InvalidSignatureError: return "Error", 400
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        return "Invalid signature", 400
     return "OK"
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    msg = event.message.text.strip().replace("：", ":")
-    if msg.startswith("新增:"):
-        success, res = process_and_save_store(msg.replace("新增:", ""))
-        reply = f"✅ 成功儲存 {res}" if success else f"❌ {res}"
-    elif msg.startswith("查詢"):
-        keyword = msg.replace("查詢", "").strip()
-        conn = get_db_connection()
-        rows = conn.execute("SELECT * FROM stores WHERE name LIKE ? OR category LIKE ?", (f"%{keyword}%", f"%{keyword}%")).fetchall()
-        conn.close()
-        reply = "\n\n".join([f"店名：{r['name']}\n📍 {r['address']}\n🔗 {r['google_maps_url']}" for r in rows]) if rows else "找不到餐廳喔！"
-    else:
-        reply = "請使用選單或輸入「新增: 店家資訊」/「查詢 關鍵字」"
-    
-    with ApiClient(configuration) as api_client:
-        MessagingApi(api_client).reply_message(ReplyMessageRequest(
-            reply_token=event.reply_token, messages=[TextMessage(text=reply)]))
+    """處理使用者傳送的 LINE 文字訊息"""
+    # 統一全形冒號為半形，增加容錯率
+    user_msg = event.message.text.strip().replace("：", ":")
+    reply_text = ""
 
+    try:
+        # A. 新增指令
+        if user_msg.startswith("新增:"):
+            content = user_msg.replace("新增:", "").strip()
+            success, result = process_and_save_store(content)
+            reply_text = f"✅ 成功儲存：{result}" if success else f"❌ 新增失敗：{result}"
+
+        # B. 查詢指令
+        elif user_msg.startswith("查詢"):
+            keyword = user_msg.replace("查詢", "").strip()
+            conn = get_db_connection()
+            rows = conn.execute(
+                "SELECT * FROM stores WHERE name LIKE ? OR category LIKE ? OR address LIKE ?",
+                (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%")
+            ).fetchall()
+            conn.close()
+
+            if rows:
+                lines = []
+                for r in rows:
+                    lines.append(
+                        f"🍽️ 店名：{r['name']}\n"
+                        f"🏷️ 分類：{r['category']}\n"
+                        f"📍 地址：{r['address']}\n"
+                        f"🔗 導航：{r['google_maps_url']}"
+                    )
+                reply_text = f"🔍 關於「{keyword}」的搜尋結果：\n\n" + "\n\n".join(lines)
+            else:
+                reply_text = f"😢 找不到與「{keyword}」相關的餐廳喔！"
+
+        # C. 選單引導與預設回覆
+        elif user_msg == "新增餐廳":
+            reply_text = "✨ 請輸入「新增:」加上店名與地址\n範例：新增:一蘭拉麵 信義區松壽路11號"
+        elif user_msg == "查詢餐廳":
+            reply_text = "🔍 請輸入「查詢」加上關鍵字\n範例：查詢 拉麵"
+        else:
+            reply_text = "歡迎使用美食地圖！\n請點擊下方選單，或直接輸入：\n👉 新增: [店家資訊]\n👉 查詢 [關鍵字]"
+
+    except Exception as e:
+        reply_text = f"❌ 系統處理發生異常：{str(e)}"
+
+    # 透過最新的 v3 SDK 寫法回傳訊息
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=reply_text)]
+            )
+        )
+
+# =========================================================
+# 7. 啟動伺服器
+# =========================================================
 if __name__ == "__main__":
+    # 確保伺服器啟動前資料庫已備妥
     init_db()
-    app.run(debug=True)
+    # 本地測試時啟動，Render 部署時將由 gunicorn 接管
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
