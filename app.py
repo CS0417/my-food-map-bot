@@ -108,7 +108,7 @@ def handle_message(event):
         try:
             # 請確保這裡的網址是你 Render 的正確網址
             res = requests.post(f"https://my-food-map-bot.onrender.com/ai_add", 
-                                json={"text": content}, timeout=10)
+                                json={"text": content}, timeout=60)
             if res.status_code == 200:
                 reply_text = "✅ 成功！AI 已經幫你把餐廳資訊存進地圖囉！"
             else:
