@@ -95,22 +95,28 @@ def handle_message(event):
     user_message = event.message.text.strip()
     reply_text = ""
 
-    # 1. 新增功能：處理「新增：店名 地址」
-    if user_message.startswith("新增："):
+    # 1. 針對按鈕點擊的精準引導
+    if user_message == "新增餐廳":
+        reply_text = "✨ 沒問題！請輸入「新增：」加上餐廳資訊。\n\n範例：\n新增：一蘭拉麵 台北市信義區松壽路11號"
+    
+    elif user_message == "查詢餐廳":
+        reply_text = "🔍 請輸入「查詢」加上您想找的關鍵字。\n\n範例：\n查詢 拉麵"
+
+    # 2. 實際執行：新增店家 (AI 解析)
+    elif user_message.startswith("新增："):
         content = user_message.replace("新增：", "").strip()
-        # 這裡我們模擬向自己的 /ai_add 路由發送請求
-        # 記得確認你的 Render 網址是否正確
         try:
-            res = requests.post(f"https://your-app-name.onrender.com/ai_add", 
+            # 請確保這裡的網址是你 Render 的正確網址
+            res = requests.post(f"https://你的專案名稱.onrender.com/ai_add", 
                                 json={"text": content}, timeout=10)
             if res.status_code == 200:
-                reply_text = "✅ 已經成功透過 AI 幫你儲存這家餐廳囉！"
+                reply_text = "✅ 成功！AI 已經幫你把餐廳資訊存進地圖囉！"
             else:
-                reply_text = "❌ 新增失敗，請確認格式是否正確。"
+                reply_text = "❌ 新增失敗，請檢查格式或是伺服器狀態。"
         except Exception as e:
-            reply_text = f"❌ 伺服器錯誤: {str(e)}"
+            reply_text = f"❌ 伺服器連線錯誤: {str(e)}"
 
-    # 2. 查詢功能：處理「查詢 關鍵字」
+    # 3. 實際執行：查詢店家 (資料庫搜尋)
     elif user_message.startswith("查詢"):
         keyword = user_message.replace("查詢", "").strip()
         conn = get_db_connection()
@@ -120,27 +126,16 @@ def handle_message(event):
         conn.close()
 
         if rows:
-            reply_text = f"找到了關於「{keyword}」的餐廳：\n"
+            reply_text = f"🍽️ 找到了關於「{keyword}」的餐廳結果：\n"
             for row in rows:
-                # 這裡使用我們之前寫好的 get_google_maps_url
                 maps_url = get_google_maps_url(row['name'], row['address'])
-                reply_text += f"- {row['name']}\n  📍 {row['address']}\n  🔗 {maps_url}\n"
+                reply_text += f"\n店名：{row['name']}\n📍 地址：{row['address']}\n🔗 導航：{maps_url}\n"
         else:
-            reply_text = f"沒有找到關於「{keyword}」的收藏喔！"
+            reply_text = f"😢 沒有找到關於「{keyword}」的餐廳喔！換個關鍵字試試看吧？"
 
-    # 3. 幫助選單：當使用者輸入其他內容時，給予引導
+    # 4. 其他奇怪輸入的通用引導
     else:
-        reply_text = """
-        歡迎使用美食地圖助理！您可以這樣操作：
-        
-        🔍 查詢：輸入「查詢 [關鍵字]」
-           範例：查詢 拉麵
-           
-        ➕ 新增：輸入「新增：[店家資訊]」
-           範例：新增：一蘭拉麵 台北市信義區...
-           
-        📊 請使用下方圖文選單開啟戰力儀表板！
-        """
+        reply_text = "你好！我是你的專屬美食地圖助理。請點擊下方圖文選單，或輸入「新增：...」與「查詢 ...」來開始使用！"
 
     # 回覆訊息給 LINE
     with ApiClient(configuration) as api_client:
@@ -151,7 +146,7 @@ def handle_message(event):
                 messages=[TextMessage(text=reply_text)]
             )
         )
-
+        
 # 1. AI 魔法新增
 @app.route("/ai_add", methods=["POST"])
 def ai_add():
