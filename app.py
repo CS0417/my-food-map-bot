@@ -92,15 +92,29 @@ def callback():
 # 當收到文字訊息時的處理邏輯
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    user_message = event.message.text
+    user_message = event.message.text.strip()
     reply_text = ""
 
-    # 1. 如果使用者輸入「查詢 [關鍵字]」，我們就去資料庫找
-    if user_message.startswith("查詢"):
+    # 1. 新增功能：處理「新增：店名 地址」
+    if user_message.startswith("新增："):
+        content = user_message.replace("新增：", "").strip()
+        # 這裡我們模擬向自己的 /ai_add 路由發送請求
+        # 記得確認你的 Render 網址是否正確
+        try:
+            res = requests.post(f"https://your-app-name.onrender.com/ai_add", 
+                                json={"text": content}, timeout=10)
+            if res.status_code == 200:
+                reply_text = "✅ 已經成功透過 AI 幫你儲存這家餐廳囉！"
+            else:
+                reply_text = "❌ 新增失敗，請確認格式是否正確。"
+        except Exception as e:
+            reply_text = f"❌ 伺服器錯誤: {str(e)}"
+
+    # 2. 查詢功能：處理「查詢 關鍵字」
+    elif user_message.startswith("查詢"):
         keyword = user_message.replace("查詢", "").strip()
         conn = get_db_connection()
         cursor = conn.cursor()
-        # 模糊搜尋店名或標籤
         rows = cursor.execute("SELECT name, address FROM stores WHERE name LIKE ? OR category LIKE ?", 
                               (f"%{keyword}%", f"%{keyword}%")).fetchall()
         conn.close()
@@ -108,15 +122,27 @@ def handle_message(event):
         if rows:
             reply_text = f"找到了關於「{keyword}」的餐廳：\n"
             for row in rows:
-                reply_text += f"- {row['name']} ({row['address']})\n"
+                # 這裡使用我們之前寫好的 get_google_maps_url
+                maps_url = get_google_maps_url(row['name'], row['address'])
+                reply_text += f"- {row['name']}\n  📍 {row['address']}\n  🔗 {maps_url}\n"
         else:
             reply_text = f"沒有找到關於「{keyword}」的收藏喔！"
-            
-    # 2. 如果輸入其他內容，保持原本的 AI 聊天回覆功能
-    else:
-        reply_text = f"你說了：「{user_message}」！\n試試看輸入「查詢 拉麵」來幫你找餐廳吧！"
 
-    # 3. 回覆訊息給 LINE
+    # 3. 幫助選單：當使用者輸入其他內容時，給予引導
+    else:
+        reply_text = """
+        歡迎使用美食地圖助理！您可以這樣操作：
+        
+        🔍 查詢：輸入「查詢 [關鍵字]」
+           範例：查詢 拉麵
+           
+        ➕ 新增：輸入「新增：[店家資訊]」
+           範例：新增：一蘭拉麵 台北市信義區...
+           
+        📊 請使用下方圖文選單開啟戰力儀表板！
+        """
+
+    # 回覆訊息給 LINE
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message(
