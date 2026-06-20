@@ -19,6 +19,44 @@
         .store-item { border-bottom: 1px dashed #ccc; padding: 15px 0; }
         .tag { background: #eee; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; color: #555; }
     </style>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+    <script>
+        // 初始化 LIFF
+        liff.init({
+            liffId: "2010455292-AtQhgVwW" // 填入你剛剛申請到的那串 ID
+        }).then(() => {
+            if (!liff.isLoggedIn()) {
+                // 如果沒登入，強制導向 LINE 登入頁
+                liff.login();
+            } else {
+                console.log("已登入，可以開始呼叫 LINE API");
+                // 這裡可以呼叫 liff.getProfile() 取得使用者名稱與頭貼
+                liff.getProfile().then(profile => {
+                    console.log("使用者名稱:", profile.displayName);
+                });
+            }
+        }).catch((err) => {
+            console.error("LIFF 初始化失敗", err);
+        });
+    </script>
+    <button onclick="sendMessage()">發送訊息給聊天室</button>
+
+    <script>
+        function sendMessage() {
+            if (liff.isLoggedIn()) {
+                liff.sendMessages([{
+                    'type': 'text',
+                    'text': '我從美食地圖網頁發送了一則訊息！'
+                }]).then(() => {
+                    window.alert('訊息已發送');
+                    liff.closeWindow(); // 關閉 LIFF 視窗
+                }).catch((err) => {
+                    window.alert('發送失敗: ' + err);
+                });
+            }
+        }
+    </script>
 </head>
 <body>
     <div class="container">
