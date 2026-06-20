@@ -51,6 +51,16 @@
                 <button class="btn btn-red" onclick="startAutoCrawl()">🚀 一鍵自動尋找新美食</button>
                 <div id="crawlResult" style="margin-top: 10px; font-weight: bold; color: #d32f2f;"></div>
             </div>
+        <div class="card">
+            <h2>📝 已儲存的餐廳清單</h2>
+            <p style="font-size: 0.9em; color: #666;">從你儲存的美食庫中快速選擇：</p>
+            
+            <select id="savedStoresDropdown" onchange="handleStoreSelection()">
+                <option value="">🔄 載入中...</option>
+            </select>
+            
+            <div id="selectedStoreInfo" style="margin-top: 10px; color: #E64A19; font-weight: bold;"></div>
+        </div>
         </div>
         <div style="margin-bottom: 20px;">
           <input type="text" id="crawlUrl" placeholder="輸入美食推薦頁面網址" style="width: 70%; padding: 8px;">
@@ -355,12 +365,61 @@ async function addToList(title, url, summary) {
                 initFoodMap();
             }
         }
+        // 1. 去後端抓資料，並把選項塞進下拉選單
+        async function loadStoresIntoDropdown() {
+            try {
+                const res = await fetch("/stores");
+                const stores = await res.json();
+                const dropdown = document.getElementById("savedStoresDropdown");
 
+                // 如果資料庫是空的
+                if (stores.length === 0) {
+                    dropdown.innerHTML = '<option value="">你還沒儲存任何餐廳喔！</option>';
+                    return;
+                }
+
+                // 清空預設選項，準備放入資料
+                dropdown.innerHTML = '<option value="">✨ 請選擇一間你想查看的餐廳...</option>';
+                
+                stores.forEach(store => {
+                    const option = document.createElement("option");
+                    // 把整個 store 的資料轉成字串藏在 value 裡面，方便等一下拿出來用
+                    option.value = JSON.stringify(store); 
+                    option.textContent = `${store.name} (${store.category || "未分類"})`;
+                    dropdown.appendChild(option);
+                });
+            } catch (err) {
+                console.error("載入選單失敗", err);
+            }
+        }
+
+        // 2. 當使用者選擇某家餐廳時，觸發這個動作
+        function handleStoreSelection() {
+            const dropdown = document.getElementById("savedStoresDropdown");
+            const selectedValue = dropdown.value;
+            const infoDiv = document.getElementById("selectedStoreInfo");
+
+            if (!selectedValue) {
+                infoDiv.innerHTML = "";
+                return;
+            }
+
+            // 把剛才藏在 value 裡面的資料解開
+            const store = JSON.parse(selectedValue);
+            
+            // 你可以決定選了之後要幹嘛，例如顯示地址跟導航按鈕
+            infoDiv.innerHTML = `
+                你選了：${store.name} <br>
+                📍 ${store.address} <br>
+                <a href="${store.google_maps_url}" target="_blank" style="color: #2196F3;">在地圖上開啟導航</a>
+            `;
+        }
         // --- 🚀 網頁載入時自動啟動 ---
         window.onload = function() {
-            loadDashboard();
-            initFoodMap();
-            performAdvancedSearch();
+            initMap(); 
+            loadDashboard(); 
+            loadStoresIntoDropdown();
+            
         };
     </script>
 </body>
