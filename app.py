@@ -125,6 +125,12 @@ def process_and_save_store(text):
 請從以下文字萃取：{text}"""
         response = client.models.generate_content(model="gemini-2.5-flash",contents=prompt,)
         raw = response.text.strip()
+        if raw.startswith("```"):
+            raw = raw.replace("```json", "").replace("```", "").strip()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return False, f"AI 回傳的格式異常，請重試！(回傳內容: {raw[:20]}...)"
         data = json.loads(raw)
         print("Gemini raw response:", repr(response.text))
 
