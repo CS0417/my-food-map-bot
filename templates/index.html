@@ -189,7 +189,8 @@
                     html = "<p style='color: red;'>沒有找到符合條件的餐廳喔！</p>";
                 } else {
                     stores.forEach(s => {
-                        const distText = s.distance_km === 9999 ? "未知" : s.distance_km + " 公里";
+                        const distText = (s.distance_km === null || s.distance_km === undefined)? "未知": s.distance_km.toFixed(2) + " 公里";
+
                         const favPrefix = s.is_favorite ? "❤️" : "";
                         html += `
                             <div class="store-item">
