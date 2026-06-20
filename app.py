@@ -24,7 +24,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 app = Flask(__name__)
 app.json.ensure_ascii = False
-DB_NAME = "favorite_places.db"
+DB_NAME = "favorite_places_v2.db"
 
 # =========================================================
 # 1. 環境變數與 LINE、Gemini 初始化設定
