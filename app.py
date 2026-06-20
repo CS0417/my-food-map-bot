@@ -123,7 +123,7 @@ def process_and_save_store(text):
 
         prompt = f"""請只回傳合法 JSON，不要加任何說明文字。格式必須是：{{"name":"店名","address":"完整地址","category":"類別標籤"}}
 請從以下文字萃取：{text}"""
-        response = client.models.generate_content(model="gemini-2.0-flash",contents=prompt,)
+        response = client.models.generate_content(model="gemini-1.5-flash",contents=prompt,)
         raw = response.text.strip()
         data = json.loads(raw)
 
