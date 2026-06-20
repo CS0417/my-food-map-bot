@@ -126,6 +126,7 @@ def process_and_save_store(text):
         response = client.models.generate_content(model="gemini-2.5-flash",contents=prompt,)
         raw = response.text.strip()
         data = json.loads(raw)
+        print("Gemini raw response:", repr(response.text))
 
         name = data.get("name")
         address = data.get("address")
