@@ -7,109 +7,267 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --primary: #FF7043; --bg: #fdfaf7; }
-        body { font-family: sans-serif; background-color: var(--bg); padding: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .btn { border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
-        .btn-blue { background: #2196F3; color: white; }
-        .btn-red { background: #f44336; color: white; }
-        .btn-green { background: #4CAF50; color: white; }
-        .btn-purple { background: #9C27B0; color: white; }
-        .store-item { background: #fff; padding: 15px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #eee; }
-        input, select, textarea { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; font-size: 1em; }
+        .btn-blue { background: #2196F3; }
+        .btn-green { background: #4CAF50; }
+        .btn-purple { background: #9C27B0; }
+        .btn-red { background: #f44336; }
+        input, select, textarea { padding: 10px; margin: 5px 0 15px 0; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        .store-item { border-bottom: 1px dashed #ccc; padding: 15px 0; }
+        .tag { background: #eee; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; color: #555; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🍽️ 我的美食指南</h1>
+        <h1 style="text-align: center; color: #333;">🍽️ 我的專屬美食指南</h1>
 
-        <div class="card">
-            <h2>📊 吃貨戰力</h2>
-            <div id="dashboard-stats">載入中...</div>
-            <canvas id="categoryChart"></canvas>
+        <div class="card" style="border-top: 5px solid #FF9800;">
+            <h2>📊 吃貨戰力儀表板</h2>
+            <div id="dashboard-stats" style="font-size: 1.2em; margin-bottom: 15px; line-height: 1.6;"></div>
+            <div style="max-width: 350px; margin: auto;">
+                <canvas id="categoryChart"></canvas>
+            </div>
         </div>
 
-        <div class="card">
-            <h2>🗺️ 美食地圖</h2>
-            <div id="foodMap" style="height: 300px;"></div>
+        <div class="card" style="border-top: 5px solid #2196F3;">
+            <h2>🗺️ 美食足跡地圖</h2>
+            <div id="foodMap" style="height: 400px; width: 100%; border-radius: 8px; z-index: 1;"></div>
         </div>
 
-        <div class="card">
-            <h2>✨ AI 魔法新增</h2>
-            <textarea id="aiInput" rows="3" placeholder="店名、地址、心得..."></textarea>
-            <button class="btn btn-purple" onclick="useAiToAddStore()">✨ 儲存餐廳</button>
-            <div id="aiResult"></div>
+        <div class="card" style="border-top: 5px solid #9C27B0;">
+            <h2>✨ 魔法新增與自動情報</h2>
+            <textarea id="aiInput" rows="3" placeholder="請貼上含有「店名」與「地址」的雜亂分享文字..."></textarea>
+            <button class="btn btn-purple" onclick="useAiToAddStore()">✨ 呼叫 AI 幫我儲存</button>
+            <div id="aiResult" style="margin-top: 10px; font-weight: bold; color: #9C27B0;"></div>
+            
+            <hr style="margin: 20px 0; border: 0; border-top: 1px dashed #ccc;">
+            
+            <div style="background-color: #ffebee; padding: 15px; border-radius: 5px; border-left: 5px solid #f44336;">
+                <h3 style="margin-top: 0; color: #d32f2f;">🕷️ 自動情報收集管線</h3>
+                <p style="margin: 5px 0;">不知道要吃什麼？讓系統自動去 PTT 美食版幫你抓最新的熱門餐廳回來！</p>
+                <button class="btn btn-red" onclick="startAutoCrawl()">🚀 一鍵自動尋找新美食</button>
+                <div id="crawlResult" style="margin-top: 10px; font-weight: bold; color: #d32f2f;"></div>
+            </div>
         </div>
 
-        <div class="card">
-            <h2>🔍 搜尋店家</h2>
-            <input type="text" id="searchKeyword" placeholder="關鍵字...">
-            <button class="btn btn-green" onclick="performAdvancedSearch()">搜尋</button>
-            <div id="searchResults" style="margin-top: 15px;"></div>
+        <div class="card" style="border-top: 5px solid #4CAF50;">
+            <h2>🔍 綜合進階搜尋</h2>
+            <input type="text" id="searchKeyword" placeholder="輸入想吃的種類或店名 (如: 咖啡、拉麵、中山站...)">
+            
+            <div style="display: flex; gap: 10px;">
+                <select id="searchRadius" style="flex: 1;">
+                    <option value="unlimited">不限距離</option>
+                    <option value="1">1 公里內</option>
+                    <option value="3" selected>3 公里內</option>
+                    <option value="5">5 公里內</option>
+                </select>
+                <select id="searchEaten" style="flex: 1;">
+                    <option value="all">吃過/沒吃過都要</option>
+                    <option value="0">只看「還沒吃過」</option>
+                    <option value="1">只看「已經吃過」</option>
+                </select>
+            </div>
+            
+            <button class="btn btn-green" onclick="performAdvancedSearch()" style="width: 100%;">開始搜尋</button>
+            <div id="searchResults" style="margin-top: 20px;"></div>
         </div>
     </div>
 
     <script>
-        let map, markerGroup;
+        let map = null;
+        let markerGroup = null;
+        let currentChart = null;
+        let userLat = null;
+        let userLon = null;
 
-        // 1. 初始化地圖
-        function initMap() {
-            map = L.map('foodMap').setView([25.0864, 121.4646], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            markerGroup = L.layerGroup().addTo(map);
-            fetchStores();
+        // 取得使用者目前位置
+        function getUserLocation(callback) {
+            if (userLat && userLon) {
+                callback();
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    userLat = pos.coords.latitude;
+                    userLon = pos.coords.longitude;
+                    callback();
+                },
+                err => {
+                    console.warn("無法取得定位，部分距離功能將受限。");
+                    callback(); // 就算沒定位也繼續執行
+                }
+            );
         }
 
-        async function fetchStores() {
-            const res = await fetch("/stores");
-            const stores = await res.json();
-            markerGroup.clearLayers();
-            stores.forEach(s => {
-                if(s.latitude) L.marker([s.latitude, s.longitude]).addTo(markerGroup).bindPopup(s.name);
+        // --- 📊 載入儀表板 ---
+        async function loadDashboard() {
+            getUserLocation(async () => {
+                const res = await fetch("/dashboard_data", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ latitude: userLat, longitude: userLon })
+                });
+                const data = await res.json();
+                
+                document.getElementById("dashboard-stats").innerHTML = `
+                    🍽️ 目前收錄：<b>${data.total}</b> 家餐廳<br>
+                    ✅ 已經征服：<b>${data.eaten}</b> 家<br>
+                    🏃 總移動距離：<b>${data.distance}</b> 公里<br>
+                    👑 目前稱號：<span style="color: #f44336; font-weight: bold;">${data.level}</span>
+                `;
+
+                const labels = Object.keys(data.categories);
+                const values = Object.values(data.categories);
+
+                if (currentChart) currentChart.destroy();
+                const ctx = document.getElementById("categoryChart").getContext("2d");
+                currentChart = new Chart(ctx, {
+                    type: "pie",
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#E7E9ED"]
+                        }]
+                    }
+                });
             });
         }
 
-        // 2. AI 新增功能
+        // --- 🗺️ 載入地圖 ---
+        async function initFoodMap() {
+            if (!map) {
+                map = L.map('foodMap').setView([23.6978, 120.9605], 7);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                markerGroup = L.layerGroup().addTo(map);
+            }
+
+            const res = await fetch("/stores");
+            const stores = await res.json();
+            markerGroup.clearLayers();
+            let bounds = [];
+
+            stores.forEach(store => {
+                if (store.latitude && store.longitude) {
+                    const prefix = store.is_favorite ? "❤️ " : "🍽️ ";
+                    const marker = L.marker([store.latitude, store.longitude]).bindPopup(`
+                        <strong>${prefix}${store.name}</strong><br>
+                        📍 ${store.address}<br>
+                        <a href="${store.google_maps_url}" target="_blank">在地圖上開啟</a>
+                    `);
+                    markerGroup.addLayer(marker);
+                    bounds.push([store.latitude, store.longitude]);
+                }
+            });
+
+            if (bounds.length > 0) map.fitBounds(bounds, { padding: [30, 30] });
+        }
+
+        // --- 🔍 綜合搜尋 ---
+        function performAdvancedSearch() {
+            getUserLocation(async () => {
+                document.getElementById("searchResults").innerHTML = "搜尋中...";
+                const keyword = document.getElementById("searchKeyword").value;
+                const radius = document.getElementById("searchRadius").value;
+                const isEaten = document.getElementById("searchEaten").value;
+
+                const res = await fetch("/advanced_search", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        keyword: keyword, latitude: userLat, longitude: userLon,
+                        radius: radius, is_eaten: isEaten, sort_by: "distance"
+                    })
+                });
+                const stores = await res.json();
+                
+                let html = "";
+                if (stores.length === 0) {
+                    html = "<p style='color: red;'>沒有找到符合條件的餐廳喔！</p>";
+                } else {
+                    stores.forEach(s => {
+                        const distText = s.distance_km === 9999 ? "未知" : s.distance_km + " 公里";
+                        const favPrefix = s.is_favorite ? "❤️" : "";
+                        html += `
+                            <div class="store-item">
+                                <h3 style="margin-top: 0;">${favPrefix} ${s.name} <span class="tag">${s.category}</span></h3>
+                                <p style="margin: 5px 0;">📍 ${s.address}</p>
+                                <p style="margin: 5px 0; color: #2196F3;">📏 距離: ${distText} | 🔗 <a href="${s.google_maps_url}" target="_blank">Google Maps 導航</a></p>
+                                <div style="margin-top: 10px;">
+                                    <button class="btn btn-blue" style="padding: 5px 10px; font-size: 0.9em;" onclick="toggleStatus(${s.id}, 'is_eaten', ${s.is_eaten ? 0 : 1})">
+                                        ${s.is_eaten ? "❌ 標記為沒吃過" : "✅ 標記為吃過了"}
+                                    </button>
+                                    <button class="btn btn-red" style="padding: 5px 10px; font-size: 0.9em; margin-left: 5px;" onclick="toggleStatus(${s.id}, 'is_favorite', ${s.is_favorite ? 0 : 1})">
+                                        ${s.is_favorite ? "💔 取消最愛" : "❤️ 加入最愛"}
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                document.getElementById("searchResults").innerHTML = html;
+            });
+        }
+
+        // --- 🔄 切換狀態 ---
+        async function toggleStatus(id, field, value) {
+            await fetch(`/update_status/${id}`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ field: field, value: value })
+            });
+            performAdvancedSearch();
+            loadDashboard();
+            initFoodMap();
+        }
+
+        // --- ✨ AI 魔法新增 ---
         async function useAiToAddStore() {
             const text = document.getElementById("aiInput").value;
+            const resDiv = document.getElementById("aiResult");
+            resDiv.innerText = "🤖 AI 正在施展魔法中...";
+            
             const res = await fetch("/ai_add", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({ text: text })
             });
             const data = await res.json();
-            alert(data.message || data.error);
-            location.reload();
+            resDiv.innerText = data.message || data.error;
+            
+            if(res.ok) {
+                document.getElementById("aiInput").value = ""; // 清空輸入框
+                performAdvancedSearch();
+                loadDashboard();
+                initFoodMap();
+            }
         }
 
-        // 3. 搜尋功能
-        async function performAdvancedSearch() {
-            const keyword = document.getElementById("searchKeyword").value;
-            const res = await fetch("/advanced_search", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ keyword: keyword, is_eaten: "all" })
-            });
-            const stores = await res.json();
-            let html = stores.map(s => `
-                <div class="store-item">
-                    <h3>${s.name}</h3>
-                    <p>${s.address}</p>
-                    <a href="${s.google_maps_url}" target="_blank">導航</a>
-                </div>
-            `).join('');
-            document.getElementById("searchResults").innerHTML = html || "找不到店家";
-        }
-
-        // 4. 載入儀表板
-        async function loadDashboard() {
-            const res = await fetch("/dashboard_data", { method: "POST" });
+        // --- 🕷️ 自動情報爬蟲 ---
+        async function startAutoCrawl() {
+            const resDiv = document.getElementById("crawlResult");
+            resDiv.innerText = "🕷️ 正在派出爬蟲前往 PTT... 接著會交給 AI 分析，這可能需要幾十秒的時間，請耐心等待...";
+            
+            const res = await fetch("/auto_crawl_and_add", { method: "POST" });
             const data = await res.json();
-            document.getElementById("dashboard-stats").innerHTML = `總數：${data.total} | 吃過：${data.eaten}`;
+            resDiv.innerText = data.message || data.error;
+            
+            if(res.ok) {
+                performAdvancedSearch();
+                loadDashboard();
+                initFoodMap();
+            }
         }
 
-        window.onload = () => { initMap(); loadDashboard(); };
+        // --- 🚀 網頁載入時自動啟動 ---
+        window.onload = function() {
+            loadDashboard();
+            initFoodMap();
+            performAdvancedSearch();
+        };
     </script>
 </body>
 </html>
