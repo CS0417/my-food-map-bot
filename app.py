@@ -256,11 +256,15 @@ def update_status(store_id):
 
 @app.route("/advanced_search", methods=["POST"])
 def advanced_search():
-    """進階搜尋與距離計算"""
     data = request.get_json()
+
     keyword = data.get("keyword", "").strip()
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+    radius = float(data.get("radius", 5))
     is_eaten = data.get("is_eaten", "all")
-    
+    sort_by = data.get("sort_by", "distance")
+
     query = "SELECT * FROM stores WHERE (name LIKE ? OR category LIKE ? OR address LIKE ?)"
     params = [f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"]
 
@@ -273,13 +277,25 @@ def advanced_search():
     conn.close()
 
     result = []
-    # 這裡保留了前端距離計算的擴充性
+
     for row in rows:
         store = dict(row)
-        store["distance_km"] = 9999 
-        result.append(store)
+
+        if latitude is not None and longitude is not None and store["latitude"] is not None and store["longitude"] is not None:
+            dist = haversine(float(latitude), float(longitude), float(store["latitude"]), float(store["longitude"]))
+            store["distance_km"] = round(dist, 2)
+
+            if dist <= radius:
+                result.append(store)
+        else:
+            store["distance_km"] = None
+            result.append(store)
+
+    if sort_by == "distance":
+        result.sort(key=lambda x: x["distance_km"] if x["distance_km"] is not None else 999999)
 
     return jsonify(result)
+
 
 @app.route("/dashboard_data", methods=["POST"])
 def dashboard_data():
