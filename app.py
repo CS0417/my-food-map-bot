@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template
 import sqlite3
 import google.generativeai as genai
 import json
-from google inport genai
+from google import genai
 from google.genai import types
 import requests
 from datetime import datetime
@@ -122,16 +122,9 @@ def process_and_save_store(text):
             return False, "伺服器缺少 GEMINI_API_KEY"
         client = genai.Client(api_key=gemini_key)
 
-        prompt = f"""
-請只回傳合法 JSON，不要加任何說明文字。
-格式必須是：
-{{"name":"店名","address":"完整地址","category":"類別標籤"}}
-
-請從以下文字萃取：
-{text}
-"""
-
-        response = client.models.generate_content(model="gemini-1.5-flash",contents=prompt,)
+        prompt = f"""請只回傳合法 JSON，不要加任何說明文字。格式必須是：{{"name":"店名","address":"完整地址","category":"類別標籤"}}
+請從以下文字萃取：{text}"""
+        response = client.models.generate_content(model="gemini-2.0-flash",contents=prompt,)
         raw = response.text.strip()
         data = json.loads(raw)
 
@@ -159,6 +152,24 @@ def process_and_save_store(text):
     except Exception as e:
         print("Gemini error:", repr(e))
         return False, f"系統處理失敗：{str(e)}"
+def get_top_n_nearby_stores(user_lat, user_lon, top_n=5):
+    conn = get_db_connection()
+    rows = conn.execute("SELECT * FROM stores").fetchall()
+    conn.close()
+
+    result = []
+
+    for row in rows:
+        store = dict(row)
+        lat = store.get("latitude")
+        lon = store.get("longitude")
+
+        if lat is not None and lon is not None:
+            store["distance_km"] = round(haversine(user_lat, user_lon, lat, lon), 2)
+            result.append(store)
+
+    result.sort(key=lambda x: x["distance_km"])
+    return result[:top_n]
 
 
 def get_stores_with_distance(user_lat, user_lon):
