@@ -57,22 +57,68 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * 2 * atan2(sqrt(a), sqrt(1-a))
 
 def process_and_save_store(text):
-    api_key = os.getenv("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    prompt = f"請從以下文字萃取「name」、「address」、「category」為 JSON，格式嚴格：{text}"
-    response = model.generate_content(prompt)
-    data = json.loads(response.text.replace('```json', '').replace('```', '').strip())
-    
-    lat, lon = get_coordinates(data['address'])
-    url = get_google_maps_url(data['name'], data['address'])
-    
-    conn = get_db_connection()
-    conn.execute("INSERT INTO stores (name, category, address, latitude, longitude, google_maps_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                 (data['name'], data.get('category', '未分類'), data['address'], lat, lon, url, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
-    return True, data['name']
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return False, "缺少 GEMINI_API_KEY"
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        prompt = f"""
+請只回傳合法 JSON，不要加任何 markdown 標記（如 ```json）或說明文字。
+格式必須是：
+{{
+  "name": "店名",
+  "address": "地址",
+  "category": "類別"
+}}
+
+請從以下文字萃取：
+{text}
+"""
+        response = model.generate_content(prompt)
+        raw = response.text.strip()
+
+        # 強力清理 Markdown 的 code block 標記
+        if raw.startswith("```"):
+            raw = raw.replace("```json", "").replace("```", "").strip()
+
+        data = json.loads(raw)
+
+        name = data.get("name")
+        address = data.get("address")
+        category = data.get("category", "未分類")
+
+        if not name or not address:
+            return False, "AI 沒有抓到店名或地址"
+
+        lat, lon = get_coordinates(address)
+        url = get_google_maps_url(name, address)
+
+        conn = get_db_connection()
+        conn.execute("""
+            INSERT INTO stores
+            (name, category, address, latitude, longitude, google_maps_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            name,
+            category,
+            address,
+            lat,
+            lon,
+            url,
+            datetime.now().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+
+        return True, name
+
+    except json.JSONDecodeError as e:
+        return False, f"AI 回傳的格式不是有效的 JSON: {e}"
+    except Exception as e:
+        return False, f"AI 解析失敗：{str(e)}"
 
 # --- 路由與 LINE 邏輯 ---
 @app.route("/")
@@ -81,9 +127,16 @@ def index(): return render_template("index.html")
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers.get("X-Line-Signature", "")
+    if not signature:
+        return "Missing signature",400
+
+    body = request.get_data(as_text=True)
+    
     try:
-        handler.handle(request.get_data(as_text=True), signature)
-    except InvalidSignatureError: return "Invalid signature", 400
+        handler.handle(body, signature)
+    except InvalidSignatureError: 
+        return "Invalid signature", 400
+        
     return 'OK'
 
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -94,13 +147,24 @@ def handle_message(event):
         reply = f"✅ 成功儲存 {name}" if success else "❌ 新增失敗"
     elif msg.startswith("查詢"):
         keyword = msg.replace("查詢", "").strip()
-        rows = get_db_connection().execute("SELECT * FROM stores WHERE name LIKE ?", (f"%{keyword}%",)).fetchall()
-        reply = "\n".join([f"店名：{r['name']}\n🔗 {r['google_maps_url']}" for r in rows]) if rows else "找不到喔！"
+        conn = get_db_connection()
+        rows = con.execute("SELECT * FROM stores WHERE name LIKE ?", (f"%{keyword}%",)).fetchall()
+        conn.close()
+        if rows:
+            reply = "\n".join([f"店名：{r['name']}\n🔗 {r['google_maps_url']}" for r in rows]) 
+        else:
+            reply = "找不到喔！"
     else:
         reply = "請點選選單或使用指令：新增: [資訊] / 查詢 [關鍵字]"
     
-    MessagingApi(ApiClient(configuration)).reply_message(ReplyMessageRequest(
-        reply_token=event.reply_token, messages=[TextMessage(text=reply)]))
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=reply_text)]
+            )
+        )
 
 @app.route("/stores", methods=["GET"])
 def get_stores():
