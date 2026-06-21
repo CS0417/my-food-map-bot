@@ -246,6 +246,12 @@ def crawl_top5_food_recommendations(target_url):
     }
 
     res = requests.get(target_url, headers=headers, timeout=10)
+    print("status_code =", res.status_code)
+    print("final_url =", res.url)
+    print("content_type =", res.headers.get("Content-Type"))
+    print("html 前 500 字：")
+    print(res.text[:500])
+
     res.raise_for_status()
 
     soup = BeautifulSoup(res.text, "html.parser")
