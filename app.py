@@ -54,29 +54,29 @@ def get_db_connection():
 def init_db():
     print("🚀 正在檢查並初始化資料庫...")
     try:
-    conn = get_db_connection()
-    cur=conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS stores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            category TEXT,
-            address TEXT,
-            latitude REAL,
-            longitude REAL,
-            google_maps_url TEXT,
-            source_type TEXT DEFAULT 'manual',
-            source_url TEXT,
-            source_title TEXT,
-            created_at TEXT,
-            is_eaten INTEGER DEFAULT 0,
-            is_favorite INTEGER DEFAULT 0
-        )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("✅ Supabase 資料庫檢查與初始化完成！")
+        conn = get_db_connection()
+        cur=conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS stores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT,
+                address TEXT,
+                latitude REAL,
+                longitude REAL,
+                google_maps_url TEXT,
+                source_type TEXT DEFAULT 'manual',
+                source_url TEXT,
+                source_title TEXT,
+                created_at TEXT,
+                is_eaten INTEGER DEFAULT 0,
+                is_favorite INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("✅ Supabase 資料庫檢查與初始化完成！")
     except Exception as e:
         print(f"❌ 資料庫初始化失敗: {e}")
 init_db()
