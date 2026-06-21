@@ -305,7 +305,40 @@ def ai_add():
         return jsonify({"message": f"成功新增：{result}"}), 200
     else:
         return jsonify({"error": result}), 400
+@app.route("/auto_crawl", methods=["POST"])
+def auto_crawl():
+    """接收網址，爬取網頁內容後交給 Gemini 解析並存入資料庫"""
+    data = request.get_json()
+    url = data.get("url", "").strip()
 
+    if not url:
+        return jsonify({"error": "請提供網址"}), 400
+
+    try:
+        # 1. 偽裝成正常瀏覽器發送請求，避免被網站阻擋
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=10)
+        res.encoding = 'utf-8'
+
+        # 2. 使用 BeautifulSoup 解析 HTML，把網頁標籤濾掉，只留下純文字
+        soup = BeautifulSoup(res.text, "html.parser")
+        text_content = soup.get_text(separator=" ", strip=True)
+
+        # 為了避免網頁文字太多塞爆 Gemini 的 Token 上限，我們只取前 3000 字
+        truncated_text = text_content[:3000]
+
+        # 3. 直接呼叫我們之前寫好的 AI 處理函式！
+        success, result = process_and_save_store(f"這是從網頁擷取下來的內容，請從中找出一間介紹的餐廳並輸出JSON：{truncated_text}")
+
+        if success:
+            return jsonify({"message": f"爬蟲成功！已自動從網頁抓取並新增：{result}"}), 200
+        else:
+            return jsonify({"error": f"爬蟲有抓到網頁，但 AI 找不到餐廳資訊：{result}"}), 400
+
+    except Exception as e:
+        return jsonify({"error": f"爬蟲擷取失敗：{str(e)}"}), 500
 @app.route("/update_status/<int:store_id>", methods=["POST"])
 def update_status(store_id):
     """更新吃過或最愛狀態"""
