@@ -376,18 +376,24 @@ def advanced_search():
 
 @app.route("/dashboard_data", methods=["POST"])
 def dashboard_data():
-    """產生儀表板所需的統計資料"""
     conn = get_db_connection()
-    total = conn.execute("SELECT COUNT(*) FROM stores").fetchone()[0]
-    eaten = conn.execute("SELECT COUNT(*) FROM stores WHERE is_eaten=1").fetchone()[0]
+    cur = conn.cursor()  # 🌟 關鍵 1：建立游標
     
-    # 統計各類別數量
-    rows = conn.execute("SELECT category, COUNT(*) as count FROM stores GROUP BY category").fetchall()
+    # 🌟 關鍵 2：改用 cur.execute，並用 as count 命名，然後用 ['count'] 取值
+    cur.execute("SELECT COUNT(*) as count FROM stores")
+    total = cur.fetchone()['count']
+    
+    cur.execute("SELECT COUNT(*) as count FROM stores WHERE is_eaten=1")
+    eaten = cur.fetchone()['count']
+    
+    cur.execute("SELECT category, COUNT(*) as count FROM stores GROUP BY category")
+    rows = cur.fetchall()
+    
+    cur.close()
     conn.close()
 
     categories = {r["category"]: r["count"] for r in rows if r["category"]}
 
-    # 稱號判定
     if total < 10: level = "美食初心者 🐣"
     elif total < 30: level = "城市探險家 🚶"
     elif total < 50: level = "老饕達人 😋"
@@ -396,7 +402,7 @@ def dashboard_data():
     return jsonify({
         "total": total,
         "eaten": eaten,
-        "distance": 0, # 未來可結合 GPS 計算累積里程
+        "distance": 0,
         "level": level,
         "categories": categories
     })
