@@ -53,8 +53,10 @@ def get_db_connection():
 
 def init_db():
     print("🚀 正在檢查並初始化資料庫...")
+    try:
     conn = get_db_connection()
-    conn.execute("""
+    cur=conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS stores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -72,8 +74,11 @@ def init_db():
         )
     """)
     conn.commit()
+    cur.close()
     conn.close()
-    print("✅ 資料庫檢查完成！")
+    print("✅ Supabase 資料庫檢查與初始化完成！")
+    except Exception as e:
+        print(f"❌ 資料庫初始化失敗: {e}")
 init_db()
 # =========================================================
 # 3. 工具與輔助函式
