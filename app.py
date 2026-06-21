@@ -165,25 +165,6 @@ def process_and_save_store(text):
     except Exception as e:
         print("Gemini error:", repr(e))
         return False, f"系統處理失敗：{str(e)}"
-def get_top_n_nearby_stores(user_lat, user_lon, top_n=5):
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM stores").fetchall()
-    conn.close()
-
-    result = []
-
-    for row in rows:
-        store = dict(row)
-        lat = store.get("latitude")
-        lon = store.get("longitude")
-
-        if lat is not None and lon is not None:
-            store["distance_km"] = round(haversine(user_lat, user_lon, lat, lon), 2)
-            result.append(store)
-
-    result.sort(key=lambda x: x["distance_km"])
-    return result[:top_n]
-
 
 def get_stores_with_distance(user_lat, user_lon):
     conn = get_db_connection()
@@ -209,6 +190,7 @@ def get_stores_with_distance(user_lat, user_lon):
     result.sort(key=lambda x: x["distance_km"] if x["distance_km"] is not None else 999999)
 
     return result
+    
 def get_nearby_stores(user_lat, user_lon, max_distance_km=3):
     conn = get_db_connection()
     rows = conn.execute("SELECT * FROM stores").fetchall()
@@ -230,52 +212,65 @@ def get_nearby_stores(user_lat, user_lon, max_distance_km=3):
 
     result.sort(key=lambda x: x["distance_km"])
     return result
-#爬蟲
-def crawl_top5_food_recommendations(target_url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; FoodGuideBot/1.0)"
-    }
-    try:
-        res = requests.get(target_url, headers=headers, timeout=10)
-        print("status_code =", res.status_code)
-        print("final_url =", res.url)
-        print("content_type =", res.headers.get("Content-Type"))
-        print("html 前 500 字：")
-        print(res.text[:500])
+def search_nearby_places_osm(lat, lon, radius_km=3):
+    """
+    使用免費的 OpenStreetMap (Overpass API) 搜尋附近餐廳
+    注意：這是免費資源，請勿頻繁發送大量請求以免被鎖 IP。
+    """
+    radius_meters = radius_km * 1000
     
-        res.raise_for_status()
-
-    soup = BeautifulSoup(res.text, "html.parser")
-    items = []
-
-    for i,card in enumerate(cards[:5],start=1):
-        title_tag = card.select_one(".title")
-            summary_tag = card.select_one(".summary")
-            link_tag = card.select_one("a")
-
-            print(f"第 {i} 筆 title_tag =", title_tag)
-            print(f"第 {i} 筆 summary_tag =", summary_tag)
-            print(f"第 {i} 筆 link_tag =", link_tag)
-
-        if not title_tag:
-            continue
-
-        title = title_tag.get_text(strip=True)
-        summary = summary_tag.get_text(strip=True) if summary_tag else ""
-        link = urljoin(target_url, link_tag.get("href")) if link_tag and link_tag.get("href") else target_url
-
-        items.append({
-                "title": title,
-                "summary": summary,
-                "url": link
-            })
-
-        print("items =", items)
-        return items
-
+    # Overpass QL 查詢語法：尋找指定範圍內的特定設施
+    overpass_query = f"""
+    [out:json][timeout:25];
+    (
+      node["amenity"~"restaurant|cafe|fast_food|bar"](around:{radius_meters},{lat},{lon});
+    );
+    out body;
+    >;
+    out skel qt;
+    """
+    
+    overpass_url = "http://overpass-api.de/api/interpreter"
+    
+    try:
+        response = requests.post(overpass_url, data={'data': overpass_query}, timeout=15)
+        response.raise_for_status() # 檢查 HTTP 狀態碼
+        data = response.json()
+        
+        results = []
+        for element in data.get('elements', []):
+            if 'tags' in element and 'name' in element['tags']:
+                tags = element['tags']
+                # 取得店名，若無中文名稱則使用預設名稱
+                name = tags.get('name:zh', tags.get('name')) 
+                if not name:
+                    continue
+                    
+                lat_store = element.get('lat')
+                lon_store = element.get('lon')
+                category = tags.get('cuisine', tags.get('amenity', '未分類'))
+                
+                # 簡單計算距離
+                dist_km = round(haversine(lat, lon, lat_store, lon_store), 2)
+                
+                # 產生一個暫時的 Google Map 搜尋網址方便點擊
+                gmap_url = get_google_maps_url(name, f"{lat_store},{lon_store}")
+                
+                results.append({
+                    "name": name,
+                    "category": category,
+                    "distance_km": dist_km,
+                    "google_maps_url": gmap_url
+                })
+        
+        # 依距離由近到遠排序
+        results.sort(key=lambda x: x['distance_km'])
+        # 為了避免回傳太多，我們只取前 10 筆
+        return results[:10]
+        
     except Exception as e:
-        print("crawl error:", repr(e))
-        return []
+        print(f"Overpass API 搜尋失敗: {e}")
+        return []   
 # =========================================================
 # 5. 網頁端 Web API 路由 (給前端 JS 呼叫)
 # =========================================================
@@ -302,40 +297,7 @@ def ai_add():
         return jsonify({"message": f"成功新增：{result}"}), 200
     else:
         return jsonify({"error": result}), 400
-@app.route("/auto_crawl", methods=["POST"])
-def auto_crawl():
-    """接收網址，爬取網頁內容後交給 Gemini 解析並存入資料庫"""
-    data = request.get_json()
-    url = data.get("url", "").strip()
 
-    if not url:
-        return jsonify({"error": "請提供網址"}), 400
-
-    try:
-        # 1. 偽裝成正常瀏覽器發送請求，避免被網站阻擋
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        res = requests.get(url, headers=headers, timeout=10)
-        res.encoding = 'utf-8'
-
-        # 2. 使用 BeautifulSoup 解析 HTML，把網頁標籤濾掉，只留下純文字
-        soup = BeautifulSoup(res.text, "html.parser")
-        text_content = soup.get_text(separator=" ", strip=True)
-
-        # 為了避免網頁文字太多塞爆 Gemini 的 Token 上限，我們只取前 3000 字
-        truncated_text = text_content[:3000]
-
-        # 3. 直接呼叫我們之前寫好的 AI 處理函式！
-        success, result = process_and_save_store(f"這是從網頁擷取下來的內容，請從中找出一間介紹的餐廳並輸出JSON：{truncated_text}")
-
-        if success:
-            return jsonify({"message": f"爬蟲成功！已自動從網頁抓取並新增：{result}"}), 200
-        else:
-            return jsonify({"error": f"爬蟲有抓到網頁，但 AI 找不到餐廳資訊：{result}"}), 400
-
-    except Exception as e:
-        return jsonify({"error": f"爬蟲擷取失敗：{str(e)}"}), 500
 @app.route("/update_status/<int:store_id>", methods=["POST"])
 def update_status(store_id):
     """更新吃過或最愛狀態"""
@@ -394,7 +356,6 @@ def advanced_search():
 
     return jsonify(result)
 
-
 @app.route("/dashboard_data", methods=["POST"])
 def dashboard_data():
     """產生儀表板所需的統計資料"""
@@ -421,20 +382,7 @@ def dashboard_data():
         "level": level,
         "categories": categories
     })
-#爬蟲
-@app.route("/crawl_recommendations", methods=["GET"])
-def crawl_recommendations():
-    target_url = request.args.get("url", "").strip()
 
-    if not target_url:
-        return jsonify({"error": "缺少 url 參數"}), 400
-
-    try:
-        items = crawl_top5_food_recommendations(target_url)
-        return jsonify(items), 200
-    except Exception as e:
-        print("crawl error:", repr(e))
-        return jsonify({"error": str(e)}), 500
 @app.route("/add_recommendation", methods=["POST"])
 def add_recommendation():
     data = request.get_json()
@@ -504,7 +452,7 @@ def handle_message(event):
 
         # B. 查詢指令
         elif user_msg.startswith("查詢"):
-            keyword = user_msg.replace("查詢", "").strip()
+            keyword = user_msg.replace("查詢:", "").strip()
             conn = get_db_connection()
             rows = conn.execute(
                 "SELECT * FROM stores WHERE name LIKE ? OR category LIKE ? OR address LIKE ?",
@@ -557,6 +505,7 @@ def nearby_stores():
 
     stores = get_nearby_stores(user_lat, user_lon, max_distance)
     return jsonify(stores)
+    
 @handler.add(MessageEvent, message=LocationMessageContent)
 def handle_location(event):
     user_lat = event.message.latitude
@@ -584,7 +533,42 @@ def handle_location(event):
                 messages=[TextMessage(text=reply)]
             )
         )
+@app.route("/add_custom_store", methods=["POST"])
+def add_custom_store():
+    """接收前端傳來的完整店家資料，直接寫入 Supabase 雲端資料庫"""
+    data = request.get_json()
+    
+    name = data.get("name")
+    address = data.get("address")
+    category = data.get("category", "未分類")
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    url = data.get("google_maps_url")
 
+    # 基本防呆驗證
+    if not name or not address:
+        return jsonify({"error": "缺少必要的店名或地址"}), 400
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # 使用 PostgreSQL 的 %s 預留字元安全寫入
+        cur.execute("""
+            INSERT INTO stores 
+            (name, category, address, latitude, longitude, google_maps_url, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (name, category, lat, lon, url, datetime.now().isoformat()))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({"message": f"🎉 已成功將「{name}」收藏至你的美食清單！"}), 200
+        
+    except Exception as e:
+        print(f"手動寫入雲端資料庫失敗: {e}")
+        return jsonify({"error": f"伺服器寫入失敗：{str(e)}"}), 500
 # =========================================================
 # 7. 啟動伺服器
 # =========================================================
