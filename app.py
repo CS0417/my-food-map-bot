@@ -5,7 +5,7 @@ import json
 from google import genai
 from google.genai import types
 import requests
-from datetime import datetime
+from datetime import datetime    
 from math import radians, sin, cos, sqrt, atan2
 import sys
 import urllib.parse
@@ -508,7 +508,7 @@ def api_search_nearby_osm():
     if not lat or not lon:
         return jsonify({"error": "缺少經緯度"}), 400
         
-    results = search_nearby_places_osm(lat, lon, radius)
+    results = search_nearby_places_osm_no_sort(lat, lon, radius_km=radius, limit=10)
     return jsonify(results)   
 @handler.add(MessageEvent, message=LocationMessageContent)
 def handle_location(event):
