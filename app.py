@@ -158,7 +158,7 @@ def process_and_save_store(text):
         cur.execute("""
             INSERT INTO stores
             (name, category, address, latitude, longitude, google_maps_url, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (name, category, address, lat, lon, url, datetime.now().isoformat()))
         conn.commit()
         cur.close()
