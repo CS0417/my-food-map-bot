@@ -154,12 +154,15 @@ def process_and_save_store(text):
         url = get_google_maps_url(name, address)
 
         conn = get_db_connection()
-        conn.execute("""
+        cur=conn.cursor()
+        cur.execute("""
             INSERT INTO stores
             (name, category, address, latitude, longitude, google_maps_url, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (name, category, address, lat, lon, url, datetime.now().isoformat()))
         conn.commit()
+        cur.close()
+        
         conn.close()
 
         return True, name
