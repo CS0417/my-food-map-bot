@@ -505,7 +505,18 @@ def nearby_stores():
 
     stores = get_nearby_stores(user_lat, user_lon, max_distance)
     return jsonify(stores)
+@app.route("/search_nearby_osm", methods=["POST"])
+def api_search_nearby_osm():
+    data = request.get_json()
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    radius = data.get("radius_km", 3)
     
+    if not lat or not lon:
+        return jsonify({"error": "缺少經緯度"}), 400
+        
+    results = search_nearby_places_osm(lat, lon, radius)
+    return jsonify(results)   
 @handler.add(MessageEvent, message=LocationMessageContent)
 def handle_location(event):
     user_lat = event.message.latitude
