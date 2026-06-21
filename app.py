@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify, render_template
-import sqlite3
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
@@ -244,26 +243,27 @@ def crawl_top5_food_recommendations(target_url):
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; FoodGuideBot/1.0)"
     }
-
-    res = requests.get(target_url, headers=headers, timeout=10)
-    print("status_code =", res.status_code)
-    print("final_url =", res.url)
-    print("content_type =", res.headers.get("Content-Type"))
-    print("html 前 500 字：")
-    print(res.text[:500])
-
-    res.raise_for_status()
+    try:
+        res = requests.get(target_url, headers=headers, timeout=10)
+        print("status_code =", res.status_code)
+        print("final_url =", res.url)
+        print("content_type =", res.headers.get("Content-Type"))
+        print("html 前 500 字：")
+        print(res.text[:500])
+    
+        res.raise_for_status()
 
     soup = BeautifulSoup(res.text, "html.parser")
     items = []
 
-    # 這裡假設網站每筆推薦的區塊是 .food-card
-    cards = soup.select(".food-card")
-
-    for card in cards[:5]:
+    for i,card in enumerate(cards[:5],start=1):
         title_tag = card.select_one(".title")
-        summary_tag = card.select_one(".summary")
-        link_tag = card.select_one("a")
+            summary_tag = card.select_one(".summary")
+            link_tag = card.select_one("a")
+
+            print(f"第 {i} 筆 title_tag =", title_tag)
+            print(f"第 {i} 筆 summary_tag =", summary_tag)
+            print(f"第 {i} 筆 link_tag =", link_tag)
 
         if not title_tag:
             continue
@@ -273,12 +273,17 @@ def crawl_top5_food_recommendations(target_url):
         link = urljoin(target_url, link_tag.get("href")) if link_tag and link_tag.get("href") else target_url
 
         items.append({
-            "title": title,
-            "summary": summary,
-            "url": link
-        })
+                "title": title,
+                "summary": summary,
+                "url": link
+            })
 
-    return items
+        print("items =", items)
+        return items
+
+    except Exception as e:
+        print("crawl error:", repr(e))
+        return []
 # =========================================================
 # 5. 網頁端 Web API 路由 (給前端 JS 呼叫)
 # =========================================================
