@@ -4,3 +4,4 @@ google-genai
 beautifulsoup4
 line-bot-sdk
 gunicorn
+psycopg2-binary
