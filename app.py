@@ -28,7 +28,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 app = Flask(__name__)
 app.json.ensure_ascii = False
-DB_NAME = "favorite_places_v2.db"
+
 
 # =========================================================
 # 1. 環境變數與 LINE、Gemini 初始化設定
@@ -58,7 +58,7 @@ def init_db():
         cur=conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS stores (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 category TEXT,
                 address TEXT,
@@ -79,7 +79,8 @@ def init_db():
         print("✅ Supabase 資料庫檢查與初始化完成！")
     except Exception as e:
         print(f"❌ 資料庫初始化失敗: {e}")
-init_db()
+if database_url:
+    init_db()
 # =========================================================
 # 3. 工具與輔助函式
 # =========================================================
@@ -108,17 +109,13 @@ def get_coordinates(address):
         print(f"座標轉換失敗: {e}")
     return None, None
 
-from math import radians, sin, cos, sqrt, atan2
-
 def haversine(lat1, lon1, lat2, lon2):
     """
     計算兩個經緯度座標之間的直線距離（公里）
     """
     R = 6371  # 地球半徑，單位：公里
-
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
-
     a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
@@ -217,65 +214,81 @@ def get_nearby_stores(user_lat, user_lon, max_distance_km=3):
 
     result.sort(key=lambda x: x["distance_km"])
     return result
-def search_nearby_places_osm(lat, lon, radius_km=3):
+def search_nearby_places_osm_no_sort(lat, lon, radius_km=3, limit=10):
     """
     使用免費的 OpenStreetMap (Overpass API) 搜尋附近餐廳
-    注意：這是免費資源，請勿頻繁發送大量請求以免被鎖 IP。
+    不排序，直接回傳符合條件的結果
     """
-    radius_meters = radius_km * 1000
-    
-    # Overpass QL 查詢語法：尋找指定範圍內的特定設施
+    radius_meters = int(radius_km * 1000)
+
     overpass_query = f"""
     [out:json][timeout:25];
     (
-      nwr["amenity"~"restaurant|cafe|fast_food|bar"](around:{radius_meters},{lat},{lon});
+      node["amenity"~"restaurant|cafe|fast_food|bar"](around:{radius_meters},{lat},{lon});
+      way["amenity"~"restaurant|cafe|fast_food|bar"](around:{radius_meters},{lat},{lon});
+      relation["amenity"~"restaurant|cafe|fast_food|bar"](around:{radius_meters},{lat},{lon});
     );
-    out body;
-    >;
-    out skel qt;
+    out center;
     """
-    
-    overpass_url = "http://overpass-api.de/api/interpreter"
-    
+
+    overpass_url = "https://overpass-api.de/api/interpreter"
+
     try:
-        response = requests.post(overpass_url, data={'data': overpass_query}, timeout=15)
-        response.raise_for_status() # 檢查 HTTP 狀態碼
+        headers = {
+            "User-Agent": "FoodGuideBot/1.0 (your_email@example.com)"
+        }
+
+        response = requests.post(
+            overpass_url,
+            data={"data": overpass_query},
+            headers=headers,
+            timeout=30
+        )
+        response.raise_for_status()
+
         data = response.json()
-        
         results = []
-        for element in data.get('elements', []):
-            if 'tags' in element and 'name' in element['tags']:
-                tags = element['tags']
-                # 取得店名，若無中文名稱則使用預設名稱
-                name = tags.get('name:zh', tags.get('name')) 
-                if not name:
-                    continue
-                    
-                lat_store = element.get('lat')
-                lon_store = element.get('lon')
-                category = tags.get('cuisine', tags.get('amenity', '未分類'))
-                
-                # 簡單計算距離
-                dist_km = round(haversine(lat, lon, lat_store, lon_store), 2)
-                
-                # 產生一個暫時的 Google Map 搜尋網址方便點擊
-                gmap_url = get_google_maps_url(name, f"{lat_store},{lon_store}")
-                
-                results.append({
-                    "name": name,
-                    "category": category,
-                    "distance_km": dist_km,
-                    "google_maps_url": gmap_url
-                })
-        
-        # 依距離由近到遠排序
-        results.sort(key=lambda x: x['distance_km'])
-        # 為了避免回傳太多，我們只取前 10 筆
-        return results[:10]
-        
+
+        for element in data.get("elements", []):
+            tags = element.get("tags", {})
+            name = tags.get("name:zh") or tags.get("name")
+            if not name:
+                continue
+
+            # node 有 lat/lon；way / relation 用 center
+            if element.get("type") == "node":
+                lat_store = element.get("lat")
+                lon_store = element.get("lon")
+            else:
+                center = element.get("center", {})
+                lat_store = center.get("lat")
+                lon_store = center.get("lon")
+
+            if lat_store is None or lon_store is None:
+                continue
+
+            category = tags.get("cuisine") or tags.get("amenity", "未分類")
+            dist_km = round(haversine(lat, lon, lat_store, lon_store), 2)
+
+            gmap_url = get_google_maps_url(name, f"{lat_store},{lon_store}")
+
+            results.append({
+                "name": name,
+                "category": category,
+                "distance_km": dist_km,
+                "google_maps_url": gmap_url,
+                "latitude": lat_store,
+                "longitude": lon_store
+            })
+
+            if len(results) >= limit:
+                break
+
+        return results
+
     except Exception as e:
-        print(f"Overpass API 搜尋失敗: {e}")
-        return []   
+        print(f"Overpass API 搜尋失敗: {repr(e)}")
+        return []
 # =========================================================
 # 5. 網頁端 Web API 路由 (給前端 JS 呼叫)
 # =========================================================
@@ -388,43 +401,23 @@ def dashboard_data():
         "categories": categories
     })
 
-@app.route("/add_recommendation", methods=["POST"])
-def add_recommendation():
+@app.route("/nearby_foods", methods=["POST"])
+def nearby_foods():
     data = request.get_json()
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    radius_km = float(data.get("radius_km", 3))
+    limit = int(data.get("limit", 10))
 
-    title = data.get("title", "").strip()
-    url = data.get("url", "").strip()
-    summary = data.get("summary", "").strip()
-
-    if not title:
-        return jsonify({"error": "缺少 title"}), 400
+    if lat is None or lon is None:
+        return jsonify({"error": "缺少座標"}), 400
 
     try:
-        conn = get_db_connection()
-        conn.execute("""
-            INSERT INTO stores
-            (name, category, address, google_maps_url, source_type, source_url, source_title, created_at, is_eaten, is_favorite)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            title,
-            "網路推薦",
-            summary,          # 這裡先把 summary 放 address 欄位當備用說明
-            url,
-            "crawled",
-            url,
-            title,
-            datetime.now().isoformat(),
-            0,
-            1
-        ))
-        conn.commit()
-        conn.close()
-
-        return jsonify({"message": f"已加入清單：{title}"}), 200
-
+        results = search_nearby_places_osm_no_sort(lat, lon, radius_km, limit)
+        return jsonify(results), 200
     except Exception as e:
-        print("add error:", repr(e))
         return jsonify({"error": str(e)}), 500
+
 
 # =========================================================
 # 6. LINE Bot 接收與處理核心
@@ -498,18 +491,7 @@ def handle_message(event):
                 messages=[TextMessage(text=reply_text)]
             )
         )
-@app.route("/nearby_stores", methods=["POST"])
-def nearby_stores():
-    data = request.get_json()
-    user_lat = data.get("latitude")
-    user_lon = data.get("longitude")
-    max_distance = float(data.get("max_distance_km", 3))
 
-    if user_lat is None or user_lon is None:
-        return jsonify({"error": "缺少座標"}), 400
-
-    stores = get_nearby_stores(user_lat, user_lon, max_distance)
-    return jsonify(stores)
 @app.route("/search_nearby_osm", methods=["POST"])
 def api_search_nearby_osm():
     data = request.get_json()
