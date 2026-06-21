@@ -62,9 +62,12 @@
             <div id="selectedStoreInfo" style="margin-top: 10px; color: #E64A19; font-weight: bold;"></div>
         </div>
         </div>
-        <div style="margin-bottom: 20px;">
-          <input type="text" id="crawlUrl" placeholder="輸入美食推薦頁面網址" style="width: 70%; padding: 8px;">
-          <button onclick="loadRecommendations()" class="btn btn-blue">抓取推薦</button>
+        <div class="card" style="border-top: 5px solid #FF5722;">
+            <h2>📍 免費附近美食雷達 (3km)</h2>
+            <p style="font-size: 0.9em; color: #666;">利用 OpenStreetMap 尋找你附近的餐廳，並可一鍵加入清單！</p>
+            <button class="btn btn-red" onclick="searchNearbyOSM()" style="width: 100%;">Radar 開啟：搜尋附近美食</button>
+            
+            <div id="recommendList" style="margin-top: 15px;"></div>
         </div>
 
 <div id="recommendList"></div>
@@ -93,90 +96,7 @@
         </div>
     </div>
     <script>
-async function loadRecommendations() {
-    const url = document.getElementById("crawlUrl").value.trim();
-    const container = document.getElementById("recommendList");
-
-    if (!url) {
-        alert("請先輸入網址");
-        return;
-    }
-
-    container.innerHTML = "爬取中...";
-
-    try {
-        const res = await fetch(`/crawl_recommendations?url=${encodeURIComponent(url)}`);
-        const data = await res.json();
-
-        if (!res.ok) {
-            container.innerHTML = `<p style="color:red;">${data.error || "抓取失敗"}</p>`;
-            return;
-        }
-
-        if (!Array.isArray(data) || data.length === 0) {
-            container.innerHTML = "<p style='color:red;'>沒有抓到推薦資料</p>";
-            return;
-        }
-
-        renderRecommendations(data);
-
-    } catch (err) {
-        console.error(err);
-        container.innerHTML = "<p style='color:red;'>抓取失敗，請稍後再試</p>";
-    }
-}
-
-function renderRecommendations(items) {
-    const container = document.getElementById("recommendList");
-
-    let html = "";
-    items.forEach((item) => {
-        const safeTitle = (item.title || "").replace(/'/g, "\\'");
-        const safeUrl = (item.url || "").replace(/'/g, "\\'");
-        const safeSummary = (item.summary || "").replace(/'/g, "\\'");
-
-        html += `
-            <div class="store-item" style="border: 1px solid #ddd; padding: 12px; margin-bottom: 12px; border-radius: 8px;">
-                <h3 style="margin-top: 0;">${item.title || "未命名"}</h3>
-                <p>${item.summary || ""}</p>
-                <p>
-                    🔗 <a href="${item.url}" target="_blank" rel="noopener noreferrer">查看原文</a>
-                </p>
-                <button class="btn btn-blue" onclick="addToList('safeTitle′,′{safeTitle}', 'safeTitle′,′{safeUrl}', '${safeSummary}')">
-                    加入清單
-                </button>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html;
-}
-
-async function addToList(title, url, summary) {
-    try {
-        const res = await fetch("/add_recommendation", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                title: title,
-                url: url,
-                summary: summary
-            })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-            alert("加入失敗：" + (data.error || "未知錯誤"));
-            return;
-        }
-
-        alert(data.message);
-    } catch (err) {
-        console.error(err);
-        alert("加入失敗：" + err);
-    }
-}
+        
 </script>
 
     <script>
@@ -349,22 +269,7 @@ async function addToList(title, url, summary) {
                 initFoodMap();
             }
         }
-
-        // --- 🕷️ 自動情報爬蟲 ---
-        async function startAutoCrawl() {
-            const resDiv = document.getElementById("crawlResult");
-            resDiv.innerText = "🕷️ 正在派出爬蟲前往 PTT... 接著會交給 AI 分析，這可能需要幾十秒的時間，請耐心等待...";
-            
-            const res = await fetch("/auto_crawl_and_add", { method: "POST" });
-            const data = await res.json();
-            resDiv.innerText = data.message || data.error;
-            
-            if(res.ok) {
-                performAdvancedSearch();
-                loadDashboard();
-                initFoodMap();
-            }
-        }
+        
         // 1. 去後端抓資料，並把選項塞進下拉選單
         async function loadStoresIntoDropdown() {
             try {
@@ -413,6 +318,91 @@ async function addToList(title, url, summary) {
                 📍 ${store.address} <br>
                 <a href="${store.google_maps_url}" target="_blank" style="color: #2196F3;">在地圖上開啟導航</a>
             `;
+        }
+        // --- 📍 搜尋附近美食 (呼叫 OSM API) ---
+        function searchNearbyOSM() {
+            const listDiv = document.getElementById("recommendList");
+            listDiv.innerHTML = "<b>📍 正在獲取你的位置，並向地圖發送請求中，請稍候...</b>";
+
+            getUserLocation(async () => {
+                if (!userLat || !userLon) {
+                    listDiv.innerHTML = "<span style='color:red;'>❌ 無法取得你的位置，請確認瀏覽器有允許定位權限！</span>";
+                    return;
+                }
+
+                try {
+                    const res = await fetch("/search_nearby_osm", {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({ latitude: userLat, longitude: userLon, radius_km: 3 })
+                    });
+                    const stores = await res.json();
+
+                    if (stores.length === 0) {
+                        listDiv.innerHTML = "😢 附近 3 公里內沒有找到符合的地點。";
+                        return;
+                    }
+
+                    let html = "<h3 style='border-bottom: 2px solid #FF5722; padding-bottom: 5px;'>🎯 附近推薦結果：</h3>";
+                    stores.forEach(store => {
+                        // 關鍵：將整包資料轉成安全字串，讓按鈕可以傳遞
+                        const safeStoreData = encodeURIComponent(JSON.stringify(store));
+                        html += `
+                            <div style="border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 8px; background: #fafafa;">
+                                <h4 style="margin: 0 0 8px 0; font-size: 1.1em;">🍽️ ${store.name} <span class="tag">${store.category}</span></h4>
+                                <p style="margin: 5px 0; color: #2196F3; font-size: 0.9em;">
+                                    📏 距離: ${store.distance_km} 公里 | 🔗 <a href="${store.google_maps_url}" target="_blank">Google Maps</a>
+                                </p>
+                                <button onclick="saveSearchedStore('${safeStoreData}')" class="btn btn-green" style="margin-top: 5px; padding: 8px 12px;">
+                                    ➕ 加入我的美食清單
+                                </button>
+                            </div>
+                        `;
+                    });
+                    listDiv.innerHTML = html;
+
+                } catch (err) {
+                    listDiv.innerHTML = "<span style='color:red;'>❌ 搜尋發生錯誤，請檢查後端是否正常運作。</span>";
+                    console.error(err);
+                }
+            });
+        }
+
+        // --- ➕ 將搜尋到的餐廳直接存入資料庫 ---
+        async function saveSearchedStore(encodedData) {
+            const store = JSON.parse(decodeURIComponent(encodedData));
+            
+            try {
+                const response = await fetch("/add_custom_store", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    // 為了避免 OSM 抓不到地址，如果沒有地址，就暫時用座標代替
+                    body: JSON.stringify({
+                        name: store.name,
+                        address: store.address || `${store.latitude || '未知'},${store.longitude || '未知'}`, 
+                        category: store.category,
+                        latitude: store.latitude || store.lat,
+                        longitude: store.longitude || store.lon,
+                        google_maps_url: store.google_maps_url
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(result.message);
+                    // 儲存成功後，自動刷新畫面上的資料
+                    performAdvancedSearch();
+                    loadDashboard();
+                    loadStoresIntoDropdown();
+                    initFoodMap();
+                } else {
+                    alert("❌ 儲存失敗：" + result.error);
+                }
+            } catch (error) {
+                console.error("連線錯誤:", error);
+                alert("網路連線失敗！");
+            }
         }
         // --- 🚀 網頁載入時自動啟動 ---
         // 使用 DOMContentLoaded，確保網頁一準備好就獨立執行，不會被別人卡住
