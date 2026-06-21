@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import json
 from google import genai
 from google.genai import types
@@ -35,13 +37,21 @@ DB_NAME = "favorite_places_v2.db"
 line_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 line_secret = os.getenv("LINE_CHANNEL_SECRET")
 gemini_key = os.getenv("GEMINI_API_KEY")
+database_url = os.getenv("DATABASE_URL") # 讀取 Supabase 連線字串
 
 if not all([line_token, line_secret, gemini_key]):
     print("⚠️ 警告：環境變數未設定完整 (請檢查 LINE_TOKEN, LINE_SECRET, 或 GEMINI_API_KEY)")
 
 configuration = Configuration(access_token=line_token)
 handler = WebhookHandler(line_secret)
-
+# =========================================================
+# 2. Supabase (PostgreSQL) 資料庫連接與初始化
+# =========================================================
+def get_db_connection():
+    # 使用 RealDictCursor 讓讀取出來的資料能像 SQLite 的 Row 一樣，直接用欄位名稱當作 Key 存取
+    conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+    return conn
+    
 # =========================================================
 # 2. 資料庫連接與初始化
 # =========================================================
