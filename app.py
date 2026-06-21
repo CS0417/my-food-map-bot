@@ -228,7 +228,7 @@ def search_nearby_places_osm(lat, lon, radius_km=3):
     overpass_query = f"""
     [out:json][timeout:25];
     (
-      node["amenity"~"restaurant|cafe|fast_food|bar"](around:{radius_meters},{lat},{lon});
+      nwr["amenity"~"restaurant|cafe|fast_food|bar"](around:{radius_meters},{lat},{lon});
     );
     out body;
     >;
