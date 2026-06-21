@@ -50,14 +50,6 @@ def get_db_connection():
     # 使用 RealDictCursor 讓讀取出來的資料能像 SQLite 的 Row 一樣，直接用欄位名稱當作 Key 存取
     conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
     return conn
-    
-# =========================================================
-# 2. 資料庫連接與初始化
-# =========================================================
-def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 def init_db():
     print("🚀 正在檢查並初始化資料庫...")
