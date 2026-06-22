@@ -168,6 +168,12 @@
             stores.forEach(store => {
                 if (store.latitude && store.longitude) {
                     const prefix = store.is_favorite ? "❤️ " : "🍽️ ";
+                    const customIcon = L.divIcon({
+                        html: `<div style="font-size: 28px; filter: drop-shadow(2px 4px 4px rgba(0,0,0,0.5));">${store.is_favorite ? '❤️' : '📍'}</div>`,
+                        className: 'custom-emoji-pin',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 30] // 讓圖釘的尖端精準對齊座標
+                    });
                     const marker = L.marker([store.latitude, store.longitude]).bindPopup(`
                         <strong>${prefix}${store.name}</strong><br>
                         📍 ${store.address}<br>
