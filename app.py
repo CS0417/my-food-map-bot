@@ -342,7 +342,11 @@ def advanced_search():
     keyword = data.get("keyword", "").strip()
     latitude = data.get("latitude")
     longitude = data.get("longitude")
-    radius = float(data.get("radius", 5))
+    radius_input = data.get("radius", 5)
+    if radius_input == "unlimited":
+        radius = float('inf')
+    else:
+        radius = float(radius_input)
     is_eaten = data.get("is_eaten", "all")
     sort_by = data.get("sort_by", "distance")
 
