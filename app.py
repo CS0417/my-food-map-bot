@@ -10,6 +10,7 @@ from math import radians, sin, cos, sqrt, atan2
 import sys
 import urllib.parse
 import os
+import re
 #爬蟲
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
@@ -92,6 +93,10 @@ def get_google_maps_url(name, address):
 def get_coordinates(address):
     """利用 OpenStreetMap API 取得真實經緯度座標"""
     try:
+        clean_address = re.sub(r'[^縣市區鄉鎮]+里', '', address)
+        clean_address = re.sub(r'\d+鄰', '', clean_address)
+        
+        print(f"🔍 準備查詢座標，原始地址: {address} -> 清洗後: {clean_address}")
         url = "https://nominatim.openstreetmap.org/search"
         params = {
             "q": address,
