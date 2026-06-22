@@ -303,7 +303,12 @@ def index():
 def get_stores():
     """取得所有餐廳資料供地圖標記"""
     conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM stores ORDER BY id DESC").fetchall()
+    cur = conn.cursor()  # 🌟 關鍵：建立游標
+    
+    cur.execute("SELECT * FROM stores ORDER BY id DESC")
+    rows = cur.fetchall()
+    
+    cur.close()          # 🌟 關鍵：關閉游標
     conn.close()
     return jsonify([dict(row) for row in rows])
 
@@ -342,6 +347,7 @@ def advanced_search():
     keyword = data.get("keyword", "").strip()
     latitude = data.get("latitude")
     longitude = data.get("longitude")
+    
     radius_input = data.get("radius", 5)
     if radius_input == "unlimited":
         radius = float('inf')
@@ -350,7 +356,7 @@ def advanced_search():
     is_eaten = data.get("is_eaten", "all")
     sort_by = data.get("sort_by", "distance")
 
-    query = "SELECT * FROM stores WHERE (name LIKE ? OR category LIKE ? OR address LIKE ?)"
+    query = "SELECT * FROM stores WHERE (name LIKE %s OR category LIKE %s OR address LIKE %s)"
     params = [f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"]
 
     if is_eaten in ["0", "1"]:
@@ -358,7 +364,11 @@ def advanced_search():
         params.append(int(is_eaten))
 
     conn = get_db_connection()
-    rows = conn.execute(query, params).fetchall()
+    cur = conn.cursor()
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    
+    cur.close()          # 🌟 關鍵：關閉游標
     conn.close()
 
     result = []
