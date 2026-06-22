@@ -58,7 +58,7 @@ def init_db():
         cur=conn.cursor()
         cur.execute("""
             CREATE TABLE IF NOT EXISTS stores (
-                id INTEGER PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 category TEXT,
                 address TEXT,
@@ -173,6 +173,7 @@ def process_and_save_store(text):
 
 def get_stores_with_distance(user_lat, user_lon):
     conn = get_db_connection()
+    cur = conn.cursor()
     rows = conn.execute("SELECT * FROM stores").fetchall()
     conn.close()
 
@@ -198,6 +199,7 @@ def get_stores_with_distance(user_lat, user_lon):
     
 def get_nearby_stores(user_lat, user_lon, max_distance_km=3):
     conn = get_db_connection()
+    cur = conn.cursor()
     rows = conn.execute("SELECT * FROM stores").fetchall()
     conn.close()
 
@@ -335,8 +337,10 @@ def update_status(store_id):
         return jsonify({"error": "不支援的狀態更新"}), 400
 
     conn = get_db_connection()
-    conn.execute(f"UPDATE stores SET {field} = ? WHERE id = ?", (value, store_id))
+    cur = conn.cursor() # 🌟 已加入游標與 %s
+    cur.execute(f"UPDATE stores SET {field} = %s WHERE id = %s", (value, store_id))
     conn.commit()
+    cur.close()
     conn.close()
     return jsonify({"success": True})
 
@@ -360,7 +364,7 @@ def advanced_search():
     params = [f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"]
 
     if is_eaten in ["0", "1"]:
-        query += " AND is_eaten = ?"
+        query += " AND is_eaten = %s"
         params.append(int(is_eaten))
 
     conn = get_db_connection()
@@ -475,10 +479,13 @@ def handle_message(event):
         elif user_msg.startswith("查詢"):
             keyword = user_msg.replace("查詢:", "").strip()
             conn = get_db_connection()
-            rows = conn.execute(
-                "SELECT * FROM stores WHERE name LIKE ? OR category LIKE ? OR address LIKE ?",
+            cur = conn.cursor() # 🌟 已加入游標與 %s
+            cur.execute(
+                "SELECT * FROM stores WHERE name LIKE %s OR category LIKE %s OR address LIKE %s",
                 (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%")
-            ).fetchall()
+            )
+            rows = cur.fetchall()
+            cur.close()
             conn.close()
 
             if rows:
@@ -532,7 +539,7 @@ def handle_location(event):
     user_lat = event.message.latitude
     user_lon = event.message.longitude
 
-    stores = get_top_n_nearby_stores(user_lat, user_lon, top_n=5)
+    stores = get_nearby_stores(user_lat, user_lon, max_distance_km=3)[:5]
 
     if not stores:
         reply = "附近沒有找到店家"
