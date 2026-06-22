@@ -99,7 +99,7 @@ def get_coordinates(address):
         print(f"🔍 準備查詢座標，原始地址: {address} -> 清洗後: {clean_address}")
         url = "https://nominatim.openstreetmap.org/search"
         params = {
-            "q": address,
+            "q": clean_address,
             "format": "json",
             "limit": 1
         }
@@ -145,7 +145,7 @@ def process_and_save_store(text):
             data = json.loads(raw)
         except json.JSONDecodeError:
             return False, f"AI 回傳的格式異常，請重試！(回傳內容: {raw[:20]}...)"
-        data = json.loads(raw)
+        
         print("Gemini raw response:", repr(response.text))
 
         name = data.get("name")
@@ -179,7 +179,11 @@ def process_and_save_store(text):
 def get_stores_with_distance(user_lat, user_lon):
     conn = get_db_connection()
     cur = conn.cursor()
-    rows = conn.execute("SELECT * FROM stores").fetchall()
+    
+    cur.execute("SELECT * FROM stores")
+    rows = cur.fetchall()
+    
+    cur.close()
     conn.close()
 
     result = []
@@ -205,7 +209,8 @@ def get_stores_with_distance(user_lat, user_lon):
 def get_nearby_stores(user_lat, user_lon, max_distance_km=3):
     conn = get_db_connection()
     cur = conn.cursor()
-    rows = conn.execute("SELECT * FROM stores").fetchall()
+    cur.execute("SELECT * FROM stores")
+    rows = cur.fetchall()
     conn.close()
 
     result = []
@@ -343,7 +348,13 @@ def update_status(store_id):
 
     conn = get_db_connection()
     cur = conn.cursor() # 🌟 已加入游標與 %s
-    cur.execute(f"UPDATE stores SET {field} = %s WHERE id = %s", (value, store_id))
+    allowed_fields = {
+    "is_eaten",
+    "is_favorite"
+    }
+    
+    if field not in allowed_fields:
+        return jsonify(...)
     conn.commit()
     cur.close()
     conn.close()
@@ -482,7 +493,12 @@ def handle_message(event):
 
         # B. 查詢指令
         elif user_msg.startswith("查詢"):
-            keyword = user_msg.replace("查詢:", "").strip()
+            keyword = (
+                user_msg
+                .replace("查詢:", "")
+                .replace("查詢", "")
+                .strip()
+            )
             conn = get_db_connection()
             cur = conn.cursor() # 🌟 已加入游標與 %s
             cur.execute(
@@ -591,7 +607,7 @@ def add_custom_store():
             INSERT INTO stores 
             (name, category, address, latitude, longitude, google_maps_url, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (name, category, lat, lon, url, datetime.now().isoformat()))
+        """, (name, category,address, lat, lon, url, datetime.now().isoformat()))
         
         conn.commit()
         cur.close()
