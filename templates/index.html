@@ -404,8 +404,8 @@
             // 使用 try-catch 包起來，就算其中一個壞掉，也不會影響其他功能
             try { loadStoresIntoDropdown(); } catch(e) { console.error(e); }
             try { loadDashboard(); } catch(e) { console.error(e); }
-            try { initMap(); } catch(e) { console.error(e); }
-            
+            try { initFoodMap(); } catch(e) { console.error(e); }
+           
             // 如果你有預設執行搜尋，也可以加這行
             try { performAdvancedSearch(); } catch(e) { console.error(e); }
         });
