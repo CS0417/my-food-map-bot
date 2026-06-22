@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>我的專屬美食指南</title>
+    <title>MY FOOD MAP</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,7 +22,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 style="text-align: center; color: #333;">🍽️ 我的專屬美食指南</h1>
+        <h1 style="text-align: center; color: #333;">🍽️ MY FOOD MAP 🍽️</h1>
 
         <div class="card" style="border-top: 5px solid #FF9800;">
             <h2>📊 吃貨戰力儀表板</h2>
@@ -38,21 +38,15 @@
         </div>
 
         <div class="card" style="border-top: 5px solid #9C27B0;">
-            <h2>✨ 魔法新增與自動情報</h2>
-            <textarea id="aiInput" rows="3" placeholder="請貼上含有「店名」與「地址」的雜亂分享文字..."></textarea>
+            <h2>➕ 手動新增餐廳</h2>
+            <textarea id="aiInput" rows="3" placeholder="請貼上含有「店名」與「地址」的分享文字..."></textarea>
             <button class="btn btn-purple" onclick="useAiToAddStore()">✨ 呼叫 AI 幫我儲存</button>
             <div id="aiResult" style="margin-top: 10px; font-weight: bold; color: #9C27B0;"></div>
             
             <hr style="margin: 20px 0; border: 0; border-top: 1px dashed #ccc;">
-            
-            <div style="background-color: #ffebee; padding: 15px; border-radius: 5px; border-left: 5px solid #f44336;">
-                <h3 style="margin-top: 0; color: #d32f2f;">🕷️ 自動情報收集管線</h3>
-                <p style="margin: 5px 0;">不知道要吃什麼？讓系統自動去 PTT 美食版幫你抓最新的熱門餐廳回來！</p>
-                <button class="btn btn-red" onclick="startAutoCrawl()">🚀 一鍵自動尋找新美食</button>
-                <div id="crawlResult" style="margin-top: 10px; font-weight: bold; color: #d32f2f;"></div>
-            </div>
+          
         <div class="card">
-            <h2>📝 已儲存的餐廳清單</h2>
+            <h2>📝 已儲存的所有餐廳清單</h2>
             <p style="font-size: 0.9em; color: #666;">從你儲存的美食庫中快速選擇：</p>
             
             <select id="savedStoresDropdown" onchange="handleStoreSelection()">
@@ -63,8 +57,8 @@
         </div>
         </div>
         <div class="card" style="border-top: 5px solid #FF5722;">
-            <h2>📍 免費附近美食雷達 (3km)</h2>
-            <p style="font-size: 0.9em; color: #666;">利用 OpenStreetMap 尋找你附近的餐廳，並可一鍵加入清單！</p>
+            <h2>📍 附近美食雷達 (3km)</h2>
+            <p style="font-size: 0.9em; color: #666;">尋找你附近的餐廳，並一鍵加入你的清單吧！</p>
             <button class="btn btn-red" onclick="searchNearbyOSM()" style="width: 100%;">Radar 開啟：搜尋附近美食</button>
             
             <div id="recommendList" style="margin-top: 15px;"></div>
@@ -85,7 +79,7 @@
                     <option value="5">5 公里內</option>
                 </select>
                 <select id="searchEaten" style="flex: 1;">
-                    <option value="all">吃過/沒吃過都要</option>
+                    <option value="all">不限是否吃過</option>
                     <option value="0">只看「還沒吃過」</option>
                     <option value="1">只看「已經吃過」</option>
                 </select>
@@ -252,7 +246,7 @@
         async function useAiToAddStore() {
             const text = document.getElementById("aiInput").value;
             const resDiv = document.getElementById("aiResult");
-            resDiv.innerText = "🤖 AI 正在施展魔法中...";
+            resDiv.innerText = "🤖 AI 正在儲存中...";
             
             const res = await fetch("/ai_add", {
                 method: "POST",
@@ -322,7 +316,7 @@
         // --- 📍 搜尋附近美食 (呼叫 OSM API) ---
         function searchNearbyOSM() {
             const listDiv = document.getElementById("recommendList");
-            listDiv.innerHTML = "<b>📍 正在獲取你的位置，並向地圖發送請求中，請稍候...</b>";
+            listDiv.innerHTML = "<b>📍 正在獲取你的位置，搜尋中，請稍候...</b>";
 
             getUserLocation(async () => {
                 if (!userLat || !userLon) {
