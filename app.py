@@ -91,27 +91,46 @@ def get_google_maps_url(name, address):
     return f"https://www.google.com/maps/search/?api=1&query={query}"
 
 def get_coordinates(address):
-    """利用 OpenStreetMap API 取得真實經緯度座標"""
+    """利用 OpenStreetMap API 取得真實經緯度座標 (支援臺灣地址超級淨膚與退路機制)"""
     try:
-        clean_address = re.sub(r'[^縣市區鄉鎮]+里', '', address)
+        # 🌟 1. 超級淨膚濾鏡：拔除外國地圖看不懂的臺灣專屬字眼
+        # 去除開頭的郵遞區號 (例如 320, 24765)
+        clean_address = re.sub(r'^\d{3,5}', '', address).strip()
+        # 去除「里」和「鄰」
+        clean_address = re.sub(r'[^縣市區鄉鎮]+里', '', clean_address)
         clean_address = re.sub(r'\d+鄰', '', clean_address)
+        # 去除「號」後面的樓層或室 (例如 22號1樓 -> 22號)
+        clean_address = re.sub(r'號.*$', '號', clean_address)
         
         print(f"🔍 準備查詢座標，原始地址: {address} -> 清洗後: {clean_address}")
+
         url = "https://nominatim.openstreetmap.org/search"
-        params = {
-            "q": clean_address,
-            "format": "json",
-            "limit": 1
-        }
-        headers = {
-            "User-Agent": "FoodGuideBot/1.0"
-        }
+        headers = {"User-Agent": "FoodGuideBot/1.0"}
+        
+        # 🎯 第一擊：用清洗後的完整地址查詢
+        params = {"q": clean_address, "format": "json", "limit": 1}
         res = requests.get(url, params=params, headers=headers, timeout=10)
         data = res.json()
+        
         if len(data) > 0:
             return float(data[0]["lat"]), float(data[0]["lon"])
+        
+        # 🎯 第二擊 (退而求其次)：如果免費地圖還是找不到精確的「門牌號碼」，我們退一步只搜「路段」
+        print(f"⚠️ 找不到精確門牌，嘗試只搜尋路段...")
+        street_only = re.sub(r'\d+號', '', clean_address) # 偷偷把幾號拔掉
+        params = {"q": street_only, "format": "json", "limit": 1}
+        res_street = requests.get(url, params=params, headers=headers, timeout=10)
+        data_street = res_street.json()
+        
+        if len(data_street) > 0:
+            print(f"✅ 成功退而求其次，定位到路段: {street_only}")
+            return float(data_street[0]["lat"]), float(data_street[0]["lon"])
+            
+        print(f"❌ 警告：OSM 徹底找不到此地址 ({clean_address})")
+            
     except Exception as e:
         print(f"座標轉換失敗: {e}")
+        
     return None, None
 
 def haversine(lat1, lon1, lat2, lon2):
