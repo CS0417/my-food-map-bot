@@ -492,11 +492,10 @@ def handle_message(event):
             reply_text = f"✅ 成功儲存：{result}" if success else f"❌ 新增失敗：{result}"
 
         # B. 查詢指令
-        elif user_msg.startswith("查詢"):
+        elif user_msg.startswith("查詢:"):
             keyword = (
                 user_msg
                 .replace("查詢:", "")
-                .replace("查詢", "")
                 .strip()
             )
             conn = get_db_connection()
