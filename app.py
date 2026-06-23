@@ -521,7 +521,27 @@ def handle_message(event):
                 reply_text = f"🔍 關於「{keyword}」的搜尋結果：\n\n" + "\n\n".join(lines)
             else:
                 reply_text = f"😢 找不到與「{keyword}」相關的餐廳喔！"
+        elif user_msg == "美食地圖列表":
+            conn = get_db_connection()
+            cur = conn.cursor()
+            # 依據 ID 倒序排列，讓最新加入的餐廳排在最上面
+            cur.execute("SELECT name, category, address, google_maps_url FROM stores ORDER BY id DESC")
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
 
+            if rows:
+                lines = []
+                for r in rows:
+                    lines.append(f"🍽️ {r['name']} ({r['category']})\n📍 {r['address']}\n🔗 {r['google_maps_url']}")
+                
+                reply_text = "📜 你的完整美食清單：\n\n" + "\n---\n".join(lines)
+                
+                # ⚠️ LINE 每個文字對話框有 5000 字的上限防呆機制
+                if len(reply_text) > 5000:
+                    reply_text = reply_text[:4800] + "\n\n...(清單太長囉！請至網頁版查看完整地圖！)"
+            else:
+                reply_text = "😢 你的美食清單目前還是空的喔！趕快貼上店家資訊讓我幫你存！"
         # C. 選單引導與預設回覆
         elif user_msg == "新增餐廳":
             reply_text = "✨ 請輸入「新增:」加上店名與地址\n範例：新增:一蘭拉麵 信義區松壽路11號"
